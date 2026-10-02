@@ -1,30 +1,41 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:auralis/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('shows the Auralis home screen', (WidgetTester tester) async {
+    await tester.pumpWidget(const AuralisApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Your sound,\nyour space.'), findsOneWidget);
+    expect(find.text('Recently played'), findsOneWidget);
+    expect(find.text('Midnight Signals'), findsNWidgets(2));
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('navigates between the main sections', (WidgetTester tester) async {
+    await tester.pumpWidget(const AuralisApp());
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('Library'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 songs'), findsOneWidget);
+
+    await tester.tap(find.text('Playlists'));
+    await tester.pumpAndSettle();
+    expect(find.text('No playlists yet'), findsOneWidget);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Preferences'), findsOneWidget);
+  });
+
+  testWidgets('opens the visual player from a song', (WidgetTester tester) async {
+    await tester.pumpWidget(const AuralisApp());
+
+    await tester.tap(find.text('Midnight Signals').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Now playing'), findsOneWidget);
+    expect(find.byIcon(Icons.skip_next_rounded), findsOneWidget);
   });
 }

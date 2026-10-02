@@ -67,6 +67,12 @@ El proyecto compila sin errores.
 
 # SPRINT 1 — UI base
 
+## Estado
+
+Completado técnicamente: interfaz base implementada, analizada, probada e
+instalada correctamente en el teléfono físico. Pendiente únicamente la revisión
+visual manual del desarrollador.
+
 ## Objetivo
 
 Crear la estructura visual principal de Auralis utilizando datos falsos.
