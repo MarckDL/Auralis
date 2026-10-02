@@ -355,6 +355,9 @@ agregar, quitar y reordenar canciones; y persistir la información como IDs en u
 archivo JSON privado. Se manejan playlists vacías, JSON corrupto, IDs duplicados,
 canciones no disponibles y errores de escritura.
 
+Hotfix aplicado: el diálogo de creación y edición mantiene su propio ciclo de vida
+para evitar la aserción de Flutter al abrirlo o cerrarlo.
+
 ## Objetivo
 
 Permitir que el usuario cree sus propias listas.

@@ -548,28 +548,13 @@ class PlaylistsScreen extends StatelessWidget {
   }
 
   Future<void> _showPlaylistDialog(BuildContext context, [Playlist? playlist]) async {
-    final nameController = TextEditingController(text: playlist?.name ?? '');
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(playlist == null ? 'New playlist' : 'Edit playlist'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(labelText: 'Name'),
-          onSubmitted: (_) => Navigator.pop(context, nameController.text),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, nameController.text),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (_) => PlaylistNameDialog(
+        initialName: playlist?.name ?? '',
+        title: playlist == null ? 'New playlist' : 'Edit playlist',
       ),
     );
-    nameController.dispose();
     if (name == null) return;
     if (playlist == null) {
       await controller.createPlaylist(name);
@@ -591,6 +576,62 @@ class PlaylistsScreen extends StatelessWidget {
       ),
     );
     if (confirmed == true) await controller.deletePlaylist(playlist.id);
+  }
+}
+
+class PlaylistNameDialog extends StatefulWidget {
+  const PlaylistNameDialog({
+    required this.initialName,
+    required this.title,
+    super.key,
+  });
+
+  final String initialName;
+  final String title;
+
+  @override
+  State<PlaylistNameDialog> createState() => _PlaylistNameDialogState();
+}
+
+class _PlaylistNameDialogState extends State<PlaylistNameDialog> {
+  late final TextEditingController _nameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    Navigator.of(context).pop(_nameController.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _nameController,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.done,
+        decoration: const InputDecoration(labelText: 'Name'),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Save')),
+      ],
+    );
   }
 }
 
