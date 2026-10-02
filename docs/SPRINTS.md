@@ -388,6 +388,13 @@ El usuario puede crear y utilizar una playlist completa.
 
 # SPRINT 7 — Artistas y álbumes
 
+## Estado
+
+Completado técnicamente: Library permite explorar canciones por artistas, álbumes
+y géneros; cada categoría tiene detalle y puede iniciar reproducción usando la cola
+actual. Las agrupaciones se calculan en memoria y usan `Unknown genre` porque
+`local_audio_scan 2.0.0` no expone ese metadato.
+
 ## Objetivo
 
 Organizar la biblioteca de forma más completa.

@@ -60,6 +60,50 @@ void main() {
     expect(find.text('Music permission required'), findsOneWidget);
     expect(find.text('Allow access'), findsOneWidget);
   });
+
+  testWidgets('browses artists and opens the artist detail', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CategoryBrowseView(
+            category: 'Artists',
+            songs: [_catalogSong('a', 'Luna Vale', 'Afterglow')],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Luna Vale'), findsOneWidget);
+    await tester.tap(find.text('Luna Vale'));
+    await tester.pumpAndSettle();
+    expect(find.text('Songs'), findsOneWidget);
+  });
+
+  testWidgets('browses albums and genres', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CategoryBrowseView(
+            category: 'Albums',
+            songs: [_catalogSong('a', 'Luna Vale', 'Afterglow')],
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Afterglow'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CategoryBrowseView(
+            category: 'Genres',
+            songs: [_catalogSong('a', 'Luna Vale', 'Afterglow')],
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Unknown genre'), findsOneWidget);
+  });
 }
 
 class FakeAudioScannerGateway implements AudioScannerGateway {
@@ -126,4 +170,17 @@ class FakePlaybackGateway implements PlaybackGateway {
   Future<void> setShuffleMode(AudioServiceShuffleMode mode) async {}
   @override
   Future<void> setRepeatMode(AudioServiceRepeatMode mode) async {}
+}
+
+Song _catalogSong(String id, String artist, String album) {
+  return Song(
+    id: id,
+    title: 'Song $id',
+    artist: artist,
+    album: album,
+    duration: const Duration(minutes: 3),
+    path: '/music/$id.mp3',
+    format: 'mp3',
+    mimeType: 'audio/mpeg',
+  );
 }

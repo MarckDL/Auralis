@@ -9,6 +9,7 @@ import 'services/audio_handler.dart';
 import 'services/favorites_controller.dart';
 import 'services/player_controller.dart';
 import 'services/music_scanner.dart';
+import 'services/music_catalog.dart';
 import 'services/playlists_controller.dart';
 
 Future<void> main() async {
@@ -316,6 +317,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   late final MusicScanner _scanner;
   MusicScanResult? _result;
   bool _isLoading = true;
+  String _selectedCategory = 'Songs';
 
   @override
   void initState() {
@@ -367,8 +369,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           children: ['Songs', 'Artists', 'Albums', 'Genres']
               .map((label) => FilterChip(
                     label: Text(label),
-                    selected: label == 'Songs',
-                    onSelected: (_) {},
+                    selected: label == _selectedCategory,
+                    onSelected: (_) => setState(() => _selectedCategory = label),
                   ))
               .toList(),
         ),
@@ -384,6 +386,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget _buildResult(BuildContext context, MusicScanResult result) {
     switch (result.status) {
       case MusicScanStatus.success:
+        if (_selectedCategory != 'Songs') {
+          return CategoryBrowseView(
+            category: _selectedCategory,
+            songs: result.songs,
+            favorites: widget.favorites,
+            onSongSelected: widget.onSongSelected,
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -459,6 +469,260 @@ class _LibraryLoading extends StatelessWidget {
       ),
     );
   }
+}
+
+class CategoryBrowseView extends StatelessWidget {
+  const CategoryBrowseView({
+    required this.category,
+    required this.songs,
+    this.favorites,
+    this.onSongSelected,
+    super.key,
+  });
+
+  final String category;
+  final List<Song> songs;
+  final FavoritesController? favorites;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = MusicCatalog(songs);
+    if (category == 'Artists') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: catalog.artists
+            .map(
+              (artist) => Card(
+                child: ListTile(
+                  leading: SongArtwork(song: artist.songs.first, size: 52),
+                  title: Text(artist.name),
+                  subtitle: Text('${artist.songs.length} songs'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ArtistDetailScreen(
+                        artist: artist.name,
+                        songs: songs,
+                        favorites: favorites,
+                        onSongSelected: onSongSelected,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      );
+    }
+    if (category == 'Albums') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: catalog.albums
+            .map(
+              (album) => Card(
+                child: ListTile(
+                  leading: SongArtwork(song: album.songs.first, size: 52),
+                  title: Text(album.name),
+                  subtitle: Text('${album.artist} · ${album.songs.length} songs'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AlbumDetailScreen(
+                        albumId: album.id,
+                        songs: songs,
+                        favorites: favorites,
+                        onSongSelected: onSongSelected,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: catalog.genres
+          .map(
+            (genre) => Card(
+              child: ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.category_rounded)),
+                title: Text(genre.name),
+                subtitle: Text('${genre.songs.length} songs'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => GenreDetailScreen(
+                      genre: genre.name,
+                      songs: songs,
+                      favorites: favorites,
+                      onSongSelected: onSongSelected,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class ArtistDetailScreen extends StatelessWidget {
+  const ArtistDetailScreen({
+    required this.artist,
+    required this.songs,
+    this.favorites,
+    this.onSongSelected,
+    super.key,
+  });
+
+  final String artist;
+  final List<Song> songs;
+  final FavoritesController? favorites;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final artistSongs = MusicCatalog(songs).songsForArtist(artist);
+    final albums = MusicCatalog(artistSongs).albums;
+    return Scaffold(
+      appBar: AppBar(title: Text(artist)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        children: [
+          Text('${artistSongs.length} songs', style: Theme.of(context).textTheme.titleMedium),
+          if (albums.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Text('Albums', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            ...albums.map(
+              (album) => ListTile(
+                leading: SongArtwork(song: album.songs.first, size: 48),
+                title: Text(album.name),
+                subtitle: Text('${album.songs.length} songs · ${_durationLabel(album.totalDuration)}'),
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Text('Songs', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          ...artistSongs.map(
+            (song) => RealSongCard(
+              song: song,
+              favorites: favorites,
+              onTap: onSongSelected == null
+                  ? null
+                  : () => onSongSelected!(song, artistSongs),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AlbumDetailScreen extends StatelessWidget {
+  const AlbumDetailScreen({
+    required this.albumId,
+    required this.songs,
+    this.favorites,
+    this.onSongSelected,
+    super.key,
+  });
+
+  final String albumId;
+  final List<Song> songs;
+  final FavoritesController? favorites;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final album = MusicCatalog(songs).albums.firstWhere(
+          (item) => item.id == albumId,
+          orElse: () => const AlbumSummary(
+            id: '',
+            name: MusicCatalog.unknownAlbum,
+            artist: MusicCatalog.unknownArtist,
+            songs: [],
+          ),
+        );
+    return Scaffold(
+      appBar: AppBar(title: Text(album.name)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        children: [
+          if (album.songs.isNotEmpty) SongArtwork(song: album.songs.first, size: 180),
+          const SizedBox(height: 16),
+          Text(album.name, style: Theme.of(context).textTheme.headlineSmall),
+          Text(album.artist),
+          Text('${album.songs.length} songs · ${_durationLabel(album.totalDuration)}'),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: album.songs.isEmpty || onSongSelected == null
+                ? null
+                : () => onSongSelected!(album.songs.first, album.songs),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Play album'),
+          ),
+          const SizedBox(height: 12),
+          ...album.songs.map(
+            (song) => RealSongCard(
+              song: song,
+              favorites: favorites,
+              onTap: onSongSelected == null
+                  ? null
+                  : () => onSongSelected!(song, album.songs),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class GenreDetailScreen extends StatelessWidget {
+  const GenreDetailScreen({
+    required this.genre,
+    required this.songs,
+    this.favorites,
+    this.onSongSelected,
+    super.key,
+  });
+
+  final String genre;
+  final List<Song> songs;
+  final FavoritesController? favorites;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final genreSongs = MusicCatalog(songs).songsForGenre(genre);
+    return Scaffold(
+      appBar: AppBar(title: Text(genre)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        children: [
+          Text('${genreSongs.length} songs', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          ...genreSongs.map(
+            (song) => RealSongCard(
+              song: song,
+              favorites: favorites,
+              onTap: onSongSelected == null
+                  ? null
+                  : () => onSongSelected!(song, genreSongs),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _durationLabel(Duration duration) {
+  final minutes = duration.inMinutes;
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
 }
 
 class PlaylistsScreen extends StatelessWidget {
