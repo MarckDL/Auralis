@@ -13,24 +13,31 @@ class HistoryEntry {
     required this.song,
     required this.playedAt,
     required this.playCount,
+    this.listenedDuration = Duration.zero,
   });
 
   final Song song;
   final DateTime playedAt;
   final int playCount;
+  final Duration listenedDuration;
 
-  HistoryEntry copyWith({DateTime? playedAt, int? playCount}) {
+  HistoryEntry copyWith({
+    DateTime? playedAt,
+    int? playCount,
+    Duration? listenedDuration,
+  }) {
     return HistoryEntry(
       song: song,
       playedAt: playedAt ?? this.playedAt,
       playCount: playCount ?? this.playCount,
+      listenedDuration: listenedDuration ?? this.listenedDuration,
     );
   }
 }
 
 class HistoryController extends ChangeNotifier {
   HistoryController({HistoryStore? repository})
-      : _repository = repository ?? _MemoryHistoryStore();
+      : _repository = repository ?? MemoryHistoryStore();
 
   final HistoryStore _repository;
   final List<HistoryEntry> _entries = <HistoryEntry>[];
@@ -81,7 +88,7 @@ class HistoryController extends ChangeNotifier {
   }
 }
 
-class _MemoryHistoryStore implements HistoryStore {
+class MemoryHistoryStore implements HistoryStore {
   final List<HistoryEntry> _entries = <HistoryEntry>[];
 
   @override

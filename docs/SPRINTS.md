@@ -552,6 +552,13 @@ Cerrar y volver a abrir Auralis no elimina la información relevante del usuario
 
 # SPRINT 10 — Funciones avanzadas
 
+## Estado
+
+Completado parcialmente: Sleep Timer y estadísticas de reproducción están
+implementados y persistidos mediante SQLite. Smart Playlists y Rating quedan para
+una segunda parte del sprint; letras, ecualizador, crossfade y gapless playback
+solo tienen investigación pendiente.
+
 Este sprint solamente comienza cuando las funciones principales estén estables.
 
 ## Sleep Timer

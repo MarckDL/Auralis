@@ -21,8 +21,15 @@ class AuralisDatabase {
     final database = await (factory ?? databaseFactory).openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-        version: 1,
-        onCreate: (db, _) async => _createSchema(db),
+      version: 2,
+      onCreate: (db, _) async => _createSchema(db),
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE history ADD COLUMN listened_ms INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+      },
       ),
     );
     return AuralisDatabase._(database);
@@ -158,7 +165,7 @@ class AuralisDatabase {
       song_id TEXT PRIMARY KEY)''');
     await db.execute('''CREATE TABLE history(
       song_id TEXT PRIMARY KEY, played_at INTEGER NOT NULL,
-      play_count INTEGER NOT NULL,
+      play_count INTEGER NOT NULL, listened_ms INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE)''');
     await db.execute('''CREATE TABLE metadata(
       key TEXT PRIMARY KEY, value TEXT NOT NULL)''');
@@ -281,6 +288,7 @@ class _DatabaseHistoryStore implements HistoryStore {
         song: _songFromRow(songs.first),
         playedAt: DateTime.fromMillisecondsSinceEpoch(row['played_at']! as int),
         playCount: row['play_count']! as int,
+        listenedDuration: Duration(milliseconds: (row['listened_ms'] ?? 0) as int),
       ));
     }
     return result;
@@ -294,6 +302,7 @@ class _DatabaseHistoryStore implements HistoryStore {
         'song_id': entry.song.id,
         'played_at': entry.playedAt.millisecondsSinceEpoch,
         'play_count': entry.playCount,
+        'listened_ms': entry.listenedDuration.inMilliseconds,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }

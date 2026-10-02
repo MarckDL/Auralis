@@ -9,7 +9,12 @@ import 'audio_handler.dart';
 enum PlayerStatus { idle, loading, ready, error }
 
 class PlayerController extends ChangeNotifier {
-  PlayerController({required this._gateway, this.onSongStarted}) {
+  PlayerController({
+    required this._gateway,
+    this.onSongStarted,
+    this.onPositionChanged,
+    this.onPlaybackCompleted,
+  }) {
     _subscriptions = [
       _gateway.playbackStateStream.listen(_onPlaybackState),
       _gateway.mediaItemStream.listen(_onMediaItem),
@@ -22,6 +27,8 @@ class PlayerController extends ChangeNotifier {
 
   final PlaybackGateway _gateway;
   final Future<void> Function(Song song)? onSongStarted;
+  final Future<void> Function(Song song, Duration position, bool isPlaying)? onPositionChanged;
+  final Future<void> Function()? onPlaybackCompleted;
   late final List<StreamSubscription<Object?>> _subscriptions;
   List<Song> _songs = const [];
   int _currentIndex = -1;
@@ -77,6 +84,14 @@ class PlayerController extends ChangeNotifier {
   Future<void> pause() async {
     try {
       await _gateway.pause();
+    } catch (error) {
+      _setError(_readableError(error));
+    }
+  }
+
+  Future<void> stop() async {
+    try {
+      await _gateway.stop();
     } catch (error) {
       _setError(_readableError(error));
     }
@@ -176,6 +191,13 @@ class PlayerController extends ChangeNotifier {
     if (state.processingState == AudioProcessingState.error ||
         state.errorCode != null) {
       _errorMessage = state.errorMessage ?? 'Unable to play this song.';
+    }
+    final song = _currentSong;
+    if (song != null) {
+      onPositionChanged?.call(song, _position, _isPlaying);
+    }
+    if (state.processingState == AudioProcessingState.completed) {
+      onPlaybackCompleted?.call();
     }
     notifyListeners();
   }

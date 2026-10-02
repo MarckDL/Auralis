@@ -10,7 +10,9 @@ import 'package:auralis/models/song.dart';
 import 'package:auralis/services/audio_handler.dart';
 import 'package:auralis/services/favorites_controller.dart';
 import 'package:auralis/services/favorites_repository.dart';
+import 'package:auralis/services/history_controller.dart';
 import 'package:auralis/services/music_scanner.dart';
+import 'package:auralis/services/statistics_controller.dart';
 
 void main() {
   testWidgets('shows the Auralis home screen', (WidgetTester tester) async {
@@ -86,6 +88,20 @@ void main() {
 
     expect(find.text('No matches found'), findsOneWidget);
     expect(find.text('Clear search'), findsOneWidget);
+  });
+
+  testWidgets('shows persisted listening statistics', (WidgetTester tester) async {
+    final statistics = StatisticsController(repository: MemoryHistoryStore());
+    await statistics.recordSongStarted(_catalogSong('stats', 'Artist', 'Album'));
+
+    await tester.pumpWidget(
+      MaterialApp(home: StatisticsScreen(controller: statistics)),
+    );
+
+    expect(find.text('1 plays'), findsOneWidget);
+    expect(find.text('Top artists'), findsOneWidget);
+    expect(find.text('Artist'), findsWidgets);
+    statistics.dispose();
   });
 
   testWidgets('shows a permission state when access is denied',

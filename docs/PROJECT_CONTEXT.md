@@ -451,7 +451,7 @@ Este documento corresponde al contexto general de Auralis.
 
 El estado exacto del código debe comprobarse directamente en el repositorio antes de realizar cambios.
 
-Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6, 7, 8 y 9. El reproductor
+Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 y 10. El reproductor
 usa `just_audio` en primer plano y `audio_service` para cola temporal, shuffle,
 repeat, avance automático, notificación multimedia y controles en segundo plano.
 Los favoritos y playlists se almacenan en SQLite desde Sprint 9, manteniendo sus
@@ -466,6 +466,10 @@ en SQLite. Los favoritos y playlists JSON
 se migran una sola vez y se conservan como respaldo; la cola sigue siendo temporal.
 La búsqueda del Home y el botón `See all` de Recently played siguen pendientes de
 una revisión de UX.
+El Sleep Timer detiene la reproducción por tiempo o al final de una canción. Las
+estadísticas se calculan desde los eventos de reproducción y posición, y se guardan
+en SQLite. Smart Playlists, Rating, letras, ecualizador, crossfade y gapless playback
+siguen fuera de alcance.
 
 ---
 

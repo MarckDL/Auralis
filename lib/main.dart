@@ -11,8 +11,9 @@ import 'services/player_controller.dart';
 import 'services/music_scanner.dart';
 import 'services/music_catalog.dart';
 import 'services/playlists_controller.dart';
-import 'services/history_controller.dart';
 import 'services/auralis_database.dart';
+import 'services/sleep_timer_controller.dart';
+import 'services/statistics_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -134,7 +135,8 @@ class _AuralisShellState extends State<AuralisShell> {
   late final PlayerController _playerController;
   late final FavoritesController _favoritesController;
   late final PlaylistsController _playlistsController;
-  late final HistoryController _historyController;
+  late final StatisticsController _statisticsController;
+  late final SleepTimerController _sleepTimerController;
   List<Song> _availableSongs = const [];
 
   static const _titles = ['Good evening', 'Library', 'Playlists', 'Settings'];
@@ -142,13 +144,16 @@ class _AuralisShellState extends State<AuralisShell> {
   @override
   void initState() {
     super.initState();
-    _historyController = HistoryController(
+    _statisticsController = StatisticsController(
       repository: widget.database?.historyStore,
     );
     _playerController = PlayerController(
       gateway: widget.playbackGateway,
-      onSongStarted: _historyController.record,
+      onSongStarted: _statisticsController.recordSongStarted,
+      onPositionChanged: _statisticsController.recordPosition,
+      onPlaybackCompleted: () async => _sleepTimerController.handleSongCompleted(),
     );
+    _sleepTimerController = SleepTimerController(playerController: _playerController);
     _favoritesController = FavoritesController(
       repository: widget.database?.favoritesStore,
     );
@@ -158,13 +163,14 @@ class _AuralisShellState extends State<AuralisShell> {
     );
     unawaited(_favoritesController.load());
     unawaited(_playlistsController.load());
-    unawaited(_historyController.load());
+    unawaited(_statisticsController.load());
   }
 
   @override
   void dispose() {
     _playerController.dispose();
-    _historyController.dispose();
+    _statisticsController.dispose();
+    _sleepTimerController.dispose();
     _favoritesController.dispose();
     _playlistsController.dispose();
     if (widget.database != null) unawaited(widget.database!.close());
@@ -178,6 +184,7 @@ class _AuralisShellState extends State<AuralisShell> {
         builder: (_) => PlayerScreen(
           controller: _playerController,
           favorites: _favoritesController,
+          sleepTimer: _sleepTimerController,
         ),
       ),
     );
@@ -192,7 +199,7 @@ class _AuralisShellState extends State<AuralisShell> {
     final pages = [
       HomeScreen(
         onOpenPlayer: _openPlayer,
-        history: _historyController,
+        history: _statisticsController,
         availableSongs: _availableSongs,
         favorites: _favoritesController,
         onSongSelected: _playSong,
@@ -209,7 +216,10 @@ class _AuralisShellState extends State<AuralisShell> {
         controller: _playlistsController,
         availableSongs: _availableSongs,
       ),
-      const SettingsScreen(),
+      SettingsScreen(
+        statistics: _statisticsController,
+        sleepTimer: _sleepTimerController,
+      ),
     ];
 
     return Scaffold(
@@ -282,7 +292,7 @@ class HomeScreen extends StatelessWidget {
   });
 
   final VoidCallback onOpenPlayer;
-  final HistoryController history;
+  final StatisticsController history;
   final List<Song> availableSongs;
   final FavoritesController? favorites;
   final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
@@ -1289,7 +1299,10 @@ class FavoritesScreen extends StatelessWidget {
 }
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({required this.statistics, required this.sleepTimer, super.key});
+
+  final StatisticsController statistics;
+  final SleepTimerController sleepTimer;
 
   @override
   Widget build(BuildContext context) {
@@ -1313,20 +1326,201 @@ class SettingsScreen extends StatelessWidget {
           title: 'About Auralis',
           subtitle: 'Sprint 1 · UI preview',
         ),
+        const SizedBox(height: 16),
+        ListTile(
+          leading: const Icon(Icons.insights_rounded),
+          title: const Text('Statistics'),
+          subtitle: const Text('Listening activity and top music'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => StatisticsScreen(controller: statistics),
+            ),
+          ),
+        ),
+        ListenableBuilder(
+          listenable: sleepTimer,
+          builder: (context, _) => ListTile(
+            leading: const Icon(Icons.bedtime_outlined),
+            title: const Text('Sleep timer'),
+            subtitle: Text(_sleepTimerLabel(sleepTimer)),
+            onTap: () => showSleepTimerSheet(context, sleepTimer),
+          ),
+        ),
       ],
     );
   }
+}
+
+class StatisticsScreen extends StatelessWidget {
+  const StatisticsScreen({required this.controller, super.key});
+
+  final StatisticsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Statistics')),
+      body: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          if (controller.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (controller.entries.isEmpty) {
+            return const Center(child: Text('Play music to build your statistics.'));
+          }
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            children: [
+              Text('Overview', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.play_circle_outline_rounded),
+                  title: Text('${controller.songsPlayed} plays'),
+                  subtitle: Text('Listening time: ${_formatDuration(controller.listeningTime)}'),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text('Top artists', style: Theme.of(context).textTheme.titleLarge),
+              ..._sortedCounts(controller.topArtists).map(
+                    (entry) => ListTile(
+                      leading: const Icon(Icons.person_outline_rounded),
+                      title: Text(entry.key),
+                      trailing: Text('${entry.value}'),
+                    ),
+                  ),
+              const SizedBox(height: 16),
+              Text('Top genres', style: Theme.of(context).textTheme.titleLarge),
+              ..._sortedCounts(controller.topGenres).map(
+                    (entry) => ListTile(
+                      leading: const Icon(Icons.category_outlined),
+                      title: Text(entry.key),
+                      trailing: Text('${entry.value}'),
+                    ),
+                  ),
+              const SizedBox(height: 16),
+              Text('Most played songs', style: Theme.of(context).textTheme.titleLarge),
+              ...controller.mostPlayed.map(
+                    (entry) => ListTile(
+                      title: Text(entry.song.title),
+                      subtitle: Text(entry.song.artist),
+                      trailing: Text('${entry.playCount}'),
+                    ),
+                  ),
+              if (controller.errorMessage != null)
+                Text(
+                  controller.errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class SleepTimerButton extends StatelessWidget {
+  const SleepTimerButton({required this.controller, super.key});
+
+  final SleepTimerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => OutlinedButton.icon(
+        onPressed: () => showSleepTimerSheet(context, controller),
+        icon: const Icon(Icons.bedtime_outlined),
+        label: Text(_sleepTimerLabel(controller)),
+      ),
+    );
+  }
+}
+
+Future<void> showSleepTimerSheet(
+  BuildContext context,
+  SleepTimerController controller,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          const ListTile(
+            title: Text('Sleep timer'),
+            subtitle: Text('Stop playback automatically'),
+          ),
+          for (final option in <({String label, Duration duration})>[
+            (label: '15 minutes', duration: Duration(minutes: 15)),
+            (label: '30 minutes', duration: Duration(minutes: 30)),
+            (label: '45 minutes', duration: Duration(minutes: 45)),
+            (label: '60 minutes', duration: Duration(minutes: 60)),
+          ])
+            ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: Text(option.label),
+              onTap: () {
+                controller.start(option.duration);
+                Navigator.pop(sheetContext);
+              },
+            ),
+          ListTile(
+            leading: const Icon(Icons.music_note_outlined),
+            title: const Text('At end of song'),
+            onTap: () {
+              controller.startAtEndOfSong();
+              Navigator.pop(sheetContext);
+            },
+          ),
+          if (controller.isActive)
+            ListTile(
+              leading: const Icon(Icons.cancel_outlined),
+              title: const Text('Cancel timer'),
+              onTap: () {
+                controller.cancel();
+                Navigator.pop(sheetContext);
+              },
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+String _sleepTimerLabel(SleepTimerController controller) {
+  if (!controller.isActive) return 'Sleep timer: Off';
+  if (controller.mode == SleepTimerMode.endOfSong) return 'Sleep timer: End of song';
+  return 'Sleep timer: ${_formatDuration(controller.remaining ?? Duration.zero)}';
+}
+
+String _formatDuration(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+}
+
+List<MapEntry<String, int>> _sortedCounts(Map<String, int> counts) {
+  return counts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
 }
 
 class PlayerScreen extends StatelessWidget {
   const PlayerScreen({
     required this.controller,
     required this.favorites,
+    required this.sleepTimer,
     super.key,
   });
 
   final PlayerController controller;
   final FavoritesController favorites;
+  final SleepTimerController sleepTimer;
 
   @override
   Widget build(BuildContext context) {
@@ -1475,6 +1669,8 @@ class PlayerScreen extends StatelessWidget {
                   icon: const Icon(Icons.queue_music_rounded),
                   label: Text('Queue (${controller.currentSongs.length})'),
                 ),
+                const SizedBox(height: 8),
+                SleepTimerButton(controller: sleepTimer),
               ],
             ),
           ),
