@@ -451,9 +451,11 @@ Este documento corresponde al contexto general de Auralis.
 
 El estado exacto del código debe comprobarse directamente en el repositorio antes de realizar cambios.
 
-Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3 y 4. El reproductor
+Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4 y 5. El reproductor
 usa `just_audio` en primer plano y `audio_service` para cola temporal, shuffle,
 repeat, avance automático, notificación multimedia y controles en segundo plano.
+Los favoritos se guardan como IDs en un archivo JSON privado; la base de datos
+queda reservada para Sprint 9.
 
 ---
 

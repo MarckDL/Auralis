@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
 import 'models/song.dart';
 import 'services/audio_handler.dart';
+import 'services/favorites_controller.dart';
 import 'services/player_controller.dart';
 import 'services/music_scanner.dart';
 
@@ -120,6 +123,7 @@ class AuralisShell extends StatefulWidget {
 class _AuralisShellState extends State<AuralisShell> {
   int _selectedIndex = 0;
   late final PlayerController _playerController;
+  late final FavoritesController _favoritesController;
 
   static const _titles = ['Good evening', 'Library', 'Playlists', 'Settings'];
 
@@ -127,11 +131,14 @@ class _AuralisShellState extends State<AuralisShell> {
   void initState() {
     super.initState();
     _playerController = PlayerController(gateway: widget.playbackGateway);
+    _favoritesController = FavoritesController();
+    unawaited(_favoritesController.load());
   }
 
   @override
   void dispose() {
     _playerController.dispose();
+    _favoritesController.dispose();
     super.dispose();
   }
 
@@ -139,7 +146,10 @@ class _AuralisShellState extends State<AuralisShell> {
     if (_playerController.currentSong == null) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PlayerScreen(controller: _playerController),
+        builder: (_) => PlayerScreen(
+          controller: _playerController,
+          favorites: _favoritesController,
+        ),
       ),
     );
   }
@@ -152,7 +162,10 @@ class _AuralisShellState extends State<AuralisShell> {
   Widget build(BuildContext context) {
     final pages = [
       HomeScreen(onOpenPlayer: _openPlayer),
-      LibraryScreen(onSongSelected: _playSong),
+      LibraryScreen(
+        favorites: _favoritesController,
+        onSongSelected: _playSong,
+      ),
       const PlaylistsScreen(),
       const SettingsScreen(),
     ];
@@ -176,8 +189,9 @@ class _AuralisShellState extends State<AuralisShell> {
         children: [
           ListenableBuilder(
             listenable: _playerController,
-            builder: (context, _) => MiniPlayer(
+        builder: (context, _) => MiniPlayer(
               controller: _playerController,
+              favorites: _favoritesController,
               onTap: _openPlayer,
             ),
           ),
@@ -266,9 +280,15 @@ class HomeScreen extends StatelessWidget {
 }
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({this.scanner, this.onSongSelected, super.key});
+  const LibraryScreen({
+    this.scanner,
+    this.favorites,
+    this.onSongSelected,
+    super.key,
+  });
 
   final MusicScanner? scanner;
+  final FavoritesController? favorites;
   final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
 
   @override
@@ -302,6 +322,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
       children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Your library', style: Theme.of(context).textTheme.titleLarge),
+            if (widget.favorites != null)
+              TextButton.icon(
+                onPressed: () => _openFavorites(context),
+                icon: const Icon(Icons.favorite_rounded, size: 18),
+                label: const Text('Favorites'),
+              ),
+          ],
+        ),
         const TextField(
           decoration: InputDecoration(
             hintText: 'Search songs, artists or albums',
@@ -343,6 +375,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ...result.songs.map(
               (song) => RealSongCard(
                 song: song,
+                favorites: widget.favorites,
                 onTap: widget.onSongSelected == null
                     ? null
                     : () => widget.onSongSelected!(song, result.songs),
@@ -375,6 +408,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
           onAction: _loadLibrary,
         );
     }
+  }
+
+  void _openFavorites(BuildContext context) {
+    final songs = _result?.songs ?? const <Song>[];
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FavoritesScreen(
+          songs: songs,
+          favorites: widget.favorites!,
+        ),
+      ),
+    );
   }
 }
 
@@ -427,6 +472,48 @@ class PlaylistsScreen extends StatelessWidget {
   }
 }
 
+class FavoritesScreen extends StatelessWidget {
+  const FavoritesScreen({
+    required this.songs,
+    required this.favorites,
+    super.key,
+  });
+
+  final List<Song> songs;
+  final FavoritesController favorites;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Favorites')),
+      body: ListenableBuilder(
+        listenable: favorites,
+        builder: (context, _) {
+          final favoriteSongs = songs
+              .where(favorites.isFavorite)
+              .toList(growable: false);
+          if (favoriteSongs.isEmpty) {
+            return const EmptyState(
+              icon: Icons.favorite_border_rounded,
+              title: 'No favorites yet',
+              message: 'Tap the heart on a song to save it here.',
+              actionLabel: 'Back to library',
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            itemCount: favoriteSongs.length,
+            itemBuilder: (context, index) => RealSongCard(
+              song: favoriteSongs[index],
+              favorites: favorites,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -458,9 +545,14 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class PlayerScreen extends StatelessWidget {
-  const PlayerScreen({required this.controller, super.key});
+  const PlayerScreen({
+    required this.controller,
+    required this.favorites,
+    super.key,
+  });
 
   final PlayerController controller;
+  final FavoritesController favorites;
 
   @override
   Widget build(BuildContext context) {
@@ -482,7 +574,26 @@ class PlayerScreen extends StatelessWidget {
             : controller.position;
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Now playing'), centerTitle: true),
+          appBar: AppBar(
+            title: const Text('Now playing'),
+            centerTitle: true,
+            actions: [
+              ListenableBuilder(
+                listenable: favorites,
+                builder: (context, _) => IconButton(
+                  onPressed: () => favorites.toggleFavorite(song),
+                  tooltip: favorites.isFavorite(song)
+                      ? 'Remove favorite'
+                      : 'Add favorite',
+                  icon: Icon(
+                    favorites.isFavorite(song)
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                  ),
+                ),
+              ),
+            ],
+          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
             child: Column(
@@ -656,9 +767,15 @@ class SongCard extends StatelessWidget {
 }
 
 class RealSongCard extends StatelessWidget {
-  const RealSongCard({required this.song, this.onTap, super.key});
+  const RealSongCard({
+    required this.song,
+    this.favorites,
+    this.onTap,
+    super.key,
+  });
 
   final Song song;
+  final FavoritesController? favorites;
   final VoidCallback? onTap;
 
   @override
@@ -668,8 +785,43 @@ class RealSongCard extends StatelessWidget {
       leading: SongArtwork(song: song, size: 52),
       title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text('${song.artist} · ${song.album}'),
-      trailing: Text(song.durationLabel),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (favorites != null)
+            FavoriteButton(song: song, favorites: favorites!),
+          Text(song.durationLabel),
+        ],
+      ),
       onTap: onTap,
+    );
+  }
+}
+
+class FavoriteButton extends StatelessWidget {
+  const FavoriteButton({required this.song, required this.favorites, super.key});
+
+  final Song song;
+  final FavoritesController favorites;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: favorites,
+      builder: (context, _) => IconButton(
+        onPressed: () => favorites.toggleFavorite(song),
+        tooltip: favorites.isFavorite(song)
+            ? 'Remove favorite'
+            : 'Add favorite',
+        icon: Icon(
+          favorites.isFavorite(song)
+              ? Icons.favorite_rounded
+              : Icons.favorite_border_rounded,
+          color: favorites.isFavorite(song)
+              ? Theme.of(context).colorScheme.primary
+              : null,
+        ),
+      ),
     );
   }
 }
@@ -768,11 +920,13 @@ class SongArtwork extends StatelessWidget {
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({
     required this.controller,
+    required this.favorites,
     required this.onTap,
     super.key,
   });
 
   final PlayerController controller;
+  final FavoritesController favorites;
   final VoidCallback onTap;
 
   @override
@@ -787,14 +941,20 @@ class MiniPlayer extends StatelessWidget {
         leading: SongArtwork(song: song, size: 44),
         title: Text(song.title),
         subtitle: Text(song.artist),
-        trailing: IconButton(
-          onPressed: controller.togglePlayPause,
-          tooltip: controller.isPlaying ? 'Pause' : 'Play',
-          icon: Icon(
-            controller.isPlaying
-                ? Icons.pause_rounded
-                : Icons.play_arrow_rounded,
-          ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FavoriteButton(song: song, favorites: favorites),
+            IconButton(
+              onPressed: controller.togglePlayPause,
+              tooltip: controller.isPlaying ? 'Pause' : 'Play',
+              icon: Icon(
+                controller.isPlaying
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
+              ),
+            ),
+          ],
         ),
       ),
     );

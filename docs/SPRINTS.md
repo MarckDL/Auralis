@@ -318,6 +318,13 @@ El usuario puede escuchar una cola de canciones y controlar la reproducción inc
 
 # SPRINT 5 — Favoritos
 
+## Estado
+
+Completado técnicamente: los favoritos se pueden agregar y quitar desde Library,
+Mini Player y Player, se muestran en la pantalla Favorites y se persisten como IDs
+en un archivo JSON privado. Se probaron archivo inexistente, JSON corrupto,
+duplicados, recuperación y errores de almacenamiento.
+
 ## Objetivo
 
 Implementar el sistema de favoritos.

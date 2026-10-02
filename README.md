@@ -4,12 +4,12 @@ Auralis es una aplicación Android de música local desarrollada con Flutter y D
 
 ## Estado actual
 
-Sprint 4: biblioteca local conectada a un reproductor avanzado con cola temporal,
-shuffle, repeat, avance automático y reproducción en segundo plano mediante
-`audio_service` y `just_audio`.
+Sprint 5: biblioteca local conectada a un reproductor avanzado y un sistema de
+favoritos persistentes mediante un archivo JSON privado de la aplicación.
 
-La cola no se persiste. Playlists funcionales, favoritos, historial, base de datos
-y ecualizador pertenecen a sprints posteriores.
+La cola no se persiste. Los favoritos sí sobreviven al cierre de la aplicación;
+playlists funcionales, historial, base de datos y ecualizador pertenecen a sprints
+posteriores.
 
 La aplicación se desarrolla con Flutter, Dart, VS Code, Android SDK mediante herramientas de línea de comandos y Git. No se utiliza Android Studio ni Android Emulator.
 
@@ -37,5 +37,9 @@ flutter test
 
 En Android, el reproductor también expone una notificación multimedia y controles
 del sistema mientras la reproducción está activa.
+
+El progreso visual del reproductor tiene una mejora pendiente: después de un seek,
+la reproducción cambia correctamente, pero el contador puede dejar de actualizarse
+continuamente hasta una futura revisión de sincronización de UI.
 
 La documentación general del proyecto se encuentra en [`docs/`](docs/).
