@@ -479,6 +479,9 @@ búsqueda al agregar canciones, índice A-Z e indicadores visuales en estadísti
 Sprint 13 aplica un tema claro predeterminado con tema oscuro opcional, sistema de
 tarjetas redondeadas, sombras suaves, Mini Player flotante y navegación inferior tipo
 cápsula. Se mantiene el contraste y las áreas táctiles mínimas usando APIs nativas.
+La posición de reproducción se sincroniza explícitamente con
+`AudioPlayer.positionStream` para actualizar el contador, la seekbar y las métricas
+de tiempo escuchado durante la reproducción.
 
 ---
 

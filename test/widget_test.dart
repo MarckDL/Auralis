@@ -19,7 +19,8 @@ void main() {
   testWidgets('shows the Auralis home screen', (WidgetTester tester) async {
     await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
-    expect(find.text('Your sound,\nyour space.'), findsOneWidget);
+    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('Explore\nyour sound.'), findsOneWidget);
     expect(find.text('Recently played'), findsOneWidget);
     expect(find.text('Midnight Signals'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);

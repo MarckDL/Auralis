@@ -39,6 +39,7 @@ class AuralisAudioHandler extends BaseAudioHandler
   AuralisAudioHandler({AudioPlayer? player}) : _player = player ?? AudioPlayer() {
     _subscriptions = [
       _player.playbackEventStream.listen(_broadcastState),
+      _player.positionStream.listen(_broadcastPosition),
       _player.currentIndexStream.listen(_updateCurrentMediaItem),
     ];
   }
@@ -163,6 +164,19 @@ class AuralisAudioHandler extends BaseAudioHandler
         bufferedPosition: event.bufferedPosition,
         speed: _player.speed,
         queueIndex: event.currentIndex,
+      ),
+    );
+  }
+
+  void _broadcastPosition(Duration position) {
+    if (_isDisposed || playbackState.value.processingState == AudioProcessingState.idle) {
+      return;
+    }
+    playbackState.add(
+      playbackState.value.copyWith(
+        updatePosition: position,
+        bufferedPosition: _player.bufferedPosition,
+        speed: _player.speed,
       ),
     );
   }

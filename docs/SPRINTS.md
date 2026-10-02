@@ -757,6 +757,10 @@ dependencias visuales nuevas.
 Se conservaron reproducción, cola, background playback, favoritos, playlists,
 historial, estadísticas y Sleep Timer. No se incorporaron fuentes externas ni
 librerías visuales adicionales.
+
+La pantalla Home sigue la referencia visual con cabecera, búsqueda tipo cápsula,
+hero de highlights y tarjetas de álbumes. El reproductor publica ticks de posición
+desde `just_audio` para evitar que el contador quede congelado.
 * Instalación.
 * Decisiones técnicas.
 

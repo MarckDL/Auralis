@@ -68,4 +68,8 @@ blancas redondeadas, sombras suaves, portadas con esquinas redondeadas, Mini Pla
 flotante y navegación inferior tipo cápsula. El rediseño usa Material 3 y APIs
 nativas de Flutter, sin librerías visuales adicionales.
 
+La posición del reproductor se publica desde `just_audio` mediante
+`AudioPlayer.positionStream`, por lo que el contador, la seekbar y el tiempo
+escuchado reciben actualizaciones reales durante la reproducción.
+
 La documentación general del proyecto se encuentra en [`docs/`](docs/).

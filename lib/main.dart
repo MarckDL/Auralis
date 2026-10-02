@@ -518,15 +518,27 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        children: [
-        Text(
-          'Your sound,\nyour space.',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                height: 1.1,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Music',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              child: Icon(
+                Icons.person_outline_rounded,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
               ),
+            ),
+          ],
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 16),
         TextField(
           onSubmitted: onSearch,
           textInputAction: TextInputAction.search,
@@ -535,7 +547,35 @@ class HomeScreen extends StatelessWidget {
             prefixIcon: Icon(Icons.search_rounded),
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
+        Text(
+          'Explore\nyour sound.',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                height: 1.05,
+              ),
+        ),
+        const SizedBox(height: 14),
+        AuralisCard(
+          padding: const EdgeInsets.fromLTRB(16, 16, 8, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your highlights', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 142,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: 3,
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (_, index) => _HighlightCard(song: mockSongs[index]),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
         _HomeHistorySection(
           history: history,
           favorites: favorites,
@@ -2460,6 +2500,70 @@ class MiniPlayer extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class AuralisCard extends StatelessWidget {
+  const AuralisCard({required this.child, this.padding = const EdgeInsets.all(16), super.key});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(padding: padding, child: child),
+    );
+  }
+}
+
+class _HighlightCard extends StatelessWidget {
+  const _HighlightCard({required this.song});
+
+  final MockSong song;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 132,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: AlbumArtwork(color: song.color, size: 132),
+          ),
+          Positioned(
+            left: 10,
+            right: 10,
+            bottom: 10,
+            child: Text(
+              song.album,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            top: 8,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              child: IconButton(
+                iconSize: 18,
+                onPressed: null,
+                icon: Icon(Icons.play_arrow_rounded, color: Colors.black),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
