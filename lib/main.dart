@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models/song.dart';
+import 'services/player_controller.dart';
 import 'services/music_scanner.dart';
 
 void main() {
@@ -102,22 +103,40 @@ class AuralisShell extends StatefulWidget {
 
 class _AuralisShellState extends State<AuralisShell> {
   int _selectedIndex = 0;
+  late final PlayerController _playerController;
 
   static const _titles = ['Good evening', 'Library', 'Playlists', 'Settings'];
 
+  @override
+  void initState() {
+    super.initState();
+    _playerController = PlayerController();
+  }
+
+  @override
+  void dispose() {
+    _playerController.dispose();
+    super.dispose();
+  }
+
   void _openPlayer() {
+    if (_playerController.currentSong == null) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PlayerScreen(song: mockSongs.first),
+        builder: (_) => PlayerScreen(controller: _playerController),
       ),
     );
+  }
+
+  Future<void> _playSong(Song song, List<Song> songs) {
+    return _playerController.playSong(song, songs);
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
       HomeScreen(onOpenPlayer: _openPlayer),
-      LibraryScreen(),
+      LibraryScreen(onSongSelected: _playSong),
       const PlaylistsScreen(),
       const SettingsScreen(),
     ];
@@ -139,7 +158,13 @@ class _AuralisShellState extends State<AuralisShell> {
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          MiniPlayer(onTap: _openPlayer),
+          ListenableBuilder(
+            listenable: _playerController,
+            builder: (context, _) => MiniPlayer(
+              controller: _playerController,
+              onTap: _openPlayer,
+            ),
+          ),
           NavigationBar(
             selectedIndex: _selectedIndex,
             onDestinationSelected: (index) {
@@ -225,9 +250,10 @@ class HomeScreen extends StatelessWidget {
 }
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({this.scanner, super.key});
+  const LibraryScreen({this.scanner, this.onSongSelected, super.key});
 
   final MusicScanner? scanner;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -298,7 +324,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            ...result.songs.map((song) => RealSongCard(song: song)),
+            ...result.songs.map(
+              (song) => RealSongCard(
+                song: song,
+                onTap: widget.onSongSelected == null
+                    ? null
+                    : () => widget.onSongSelected!(song, result.songs),
+              ),
+            ),
           ],
         );
       case MusicScanStatus.empty:
@@ -409,21 +442,36 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class PlayerScreen extends StatelessWidget {
-  const PlayerScreen({required this.song, super.key});
+  const PlayerScreen({required this.controller, super.key});
 
-  final MockSong song;
+  final PlayerController controller;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Now playing'), centerTitle: true),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
-        child: Column(
-          children: [
-            Column(
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final song = controller.currentSong;
+        if (song == null) {
+          return const Scaffold(
+            body: Center(child: Text('No song selected')),
+          );
+        }
+
+        final maxDuration = controller.duration.inMilliseconds > 0
+            ? controller.duration
+            : const Duration(seconds: 1);
+        final position = controller.position > maxDuration
+            ? maxDuration
+            : controller.position;
+
+        return Scaffold(
+          appBar: AppBar(title: const Text('Now playing'), centerTitle: true),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
+            child: Column(
               children: [
-                AlbumArtwork(color: song.color, size: 290),
+                SongArtwork(song: song, size: 290),
                 const SizedBox(height: 28),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -443,44 +491,75 @@ class PlayerScreen extends StatelessWidget {
                         ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 48),
-            Column(
-              children: [
-                Slider(value: 0.38, onChanged: (_) {}),
-                const Row(
+                const SizedBox(height: 42),
+                if (controller.status == PlayerStatus.error)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      controller.errorMessage ?? 'Unable to play this song.',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
+                  ),
+                Slider(
+                  value: position.inMilliseconds.toDouble(),
+                  max: maxDuration.inMilliseconds.toDouble(),
+                  onChanged: controller.status == PlayerStatus.loading
+                      ? null
+                      : (value) => controller.seek(
+                            Duration(milliseconds: value.round()),
+                          ),
+                ),
+                Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [Text('1:24'), Text('3:42')],
+                  children: [
+                    Text(_formatDuration(controller.position)),
+                    Text(_formatDuration(controller.duration)),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    IconButton(onPressed: () {}, icon: const Icon(Icons.shuffle_rounded)),
                     IconButton(
-                      onPressed: () {},
+                      onPressed: controller.previous,
                       iconSize: 36,
                       icon: const Icon(Icons.skip_previous_rounded),
                     ),
                     FloatingActionButton(
-                      onPressed: () {},
-                      child: const Icon(Icons.play_arrow_rounded),
+                      onPressed: controller.status == PlayerStatus.loading
+                          ? null
+                          : controller.togglePlayPause,
+                      child: controller.status == PlayerStatus.loading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              controller.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                            ),
                     ),
                     IconButton(
-                      onPressed: () {},
+                      onPressed: controller.next,
                       iconSize: 36,
                       icon: const Icon(Icons.skip_next_rounded),
                     ),
-                    IconButton(onPressed: () {}, icon: const Icon(Icons.repeat_rounded)),
                   ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 }
 
@@ -504,9 +583,10 @@ class SongCard extends StatelessWidget {
 }
 
 class RealSongCard extends StatelessWidget {
-  const RealSongCard({required this.song, super.key});
+  const RealSongCard({required this.song, this.onTap, super.key});
 
   final Song song;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -516,6 +596,7 @@ class RealSongCard extends StatelessWidget {
       title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text('${song.artist} · ${song.album}'),
       trailing: Text(song.durationLabel),
+      onTap: onTap,
     );
   }
 }
@@ -612,23 +693,35 @@ class SongArtwork extends StatelessWidget {
 }
 
 class MiniPlayer extends StatelessWidget {
-  const MiniPlayer({required this.onTap, super.key});
+  const MiniPlayer({
+    required this.controller,
+    required this.onTap,
+    super.key,
+  });
 
+  final PlayerController controller;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final song = controller.currentSong;
+    if (song == null) return const SizedBox.shrink();
+
     return Card(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: ListTile(
         onTap: onTap,
-        leading: const AlbumArtwork(color: Color(0xFF5C4B8A), size: 44),
-        title: const Text('Midnight Signals'),
-        subtitle: const Text('Luna Vale'),
+        leading: SongArtwork(song: song, size: 44),
+        title: Text(song.title),
+        subtitle: Text(song.artist),
         trailing: IconButton(
-          onPressed: () {},
-          tooltip: 'Play',
-          icon: const Icon(Icons.play_arrow_rounded),
+          onPressed: controller.togglePlayPause,
+          tooltip: controller.isPlaying ? 'Pause' : 'Play',
+          icon: Icon(
+            controller.isPlaying
+                ? Icons.pause_rounded
+                : Icons.play_arrow_rounded,
+          ),
         ),
       ),
     );

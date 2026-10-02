@@ -11,7 +11,7 @@ void main() {
 
     expect(find.text('Your sound,\nyour space.'), findsOneWidget);
     expect(find.text('Recently played'), findsOneWidget);
-    expect(find.text('Midnight Signals'), findsNWidgets(2));
+    expect(find.text('Midnight Signals'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 

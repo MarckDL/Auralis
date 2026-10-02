@@ -451,8 +451,8 @@ Este documento corresponde al contexto general de Auralis.
 
 El estado exacto del código debe comprobarse directamente en el repositorio antes de realizar cambios.
 
-Actualmente Auralis tiene completados Sprint 0 y Sprint 1, y se encuentra en Sprint 2:
-escaneo de música local y presentación de metadatos reales en Library.
+Actualmente Auralis tiene completados Sprint 0, Sprint 1 y Sprint 2, y se encuentra
+en Sprint 3: reproducción local en primer plano y controles básicos del reproductor.
 
 ---
 

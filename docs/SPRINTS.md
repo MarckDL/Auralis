@@ -210,6 +210,13 @@ Auralis puede detectar música real del celular y mostrarla en Library.
 
 # SPRINT 3 — Reproductor básico
 
+## Estado
+
+Completado técnicamente: el reproductor en primer plano conecta Library, Mini
+Player y Player mediante `just_audio`, y la aplicación compila, se instala y
+arranca correctamente en el teléfono físico. Pendiente únicamente la prueba
+manual de reproducción con una canción real.
+
 ## Objetivo
 
 Reproducir canciones locales.
