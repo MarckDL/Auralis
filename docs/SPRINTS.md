@@ -348,6 +348,13 @@ El usuario puede administrar sus canciones favoritas.
 
 # SPRINT 6 — Playlists
 
+## Estado
+
+Completado técnicamente: se pueden crear, editar, eliminar y reproducir playlists;
+agregar, quitar y reordenar canciones; y persistir la información como IDs en un
+archivo JSON privado. Se manejan playlists vacías, JSON corrupto, IDs duplicados,
+canciones no disponibles y errores de escritura.
+
 ## Objetivo
 
 Permitir que el usuario cree sus propias listas.

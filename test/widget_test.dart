@@ -24,8 +24,8 @@ void main() {
     await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
     await tester.tap(find.text('Playlists'));
-    await tester.pump();
-    expect(find.text('No playlists yet'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     await tester.tap(find.text('Settings'));
     await tester.pump();

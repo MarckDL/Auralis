@@ -4,10 +4,12 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
 import 'models/song.dart';
+import 'models/playlist.dart';
 import 'services/audio_handler.dart';
 import 'services/favorites_controller.dart';
 import 'services/player_controller.dart';
 import 'services/music_scanner.dart';
+import 'services/playlists_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -124,6 +126,8 @@ class _AuralisShellState extends State<AuralisShell> {
   int _selectedIndex = 0;
   late final PlayerController _playerController;
   late final FavoritesController _favoritesController;
+  late final PlaylistsController _playlistsController;
+  List<Song> _availableSongs = const [];
 
   static const _titles = ['Good evening', 'Library', 'Playlists', 'Settings'];
 
@@ -132,13 +136,18 @@ class _AuralisShellState extends State<AuralisShell> {
     super.initState();
     _playerController = PlayerController(gateway: widget.playbackGateway);
     _favoritesController = FavoritesController();
+    _playlistsController = PlaylistsController(
+      playerController: _playerController,
+    );
     unawaited(_favoritesController.load());
+    unawaited(_playlistsController.load());
   }
 
   @override
   void dispose() {
     _playerController.dispose();
     _favoritesController.dispose();
+    _playlistsController.dispose();
     super.dispose();
   }
 
@@ -164,9 +173,15 @@ class _AuralisShellState extends State<AuralisShell> {
       HomeScreen(onOpenPlayer: _openPlayer),
       LibraryScreen(
         favorites: _favoritesController,
+        onSongsChanged: (songs) {
+          if (mounted) setState(() => _availableSongs = songs);
+        },
         onSongSelected: _playSong,
       ),
-      const PlaylistsScreen(),
+      PlaylistsScreen(
+        controller: _playlistsController,
+        availableSongs: _availableSongs,
+      ),
       const SettingsScreen(),
     ];
 
@@ -283,12 +298,14 @@ class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     this.scanner,
     this.favorites,
+    this.onSongsChanged,
     this.onSongSelected,
     super.key,
   });
 
   final MusicScanner? scanner;
   final FavoritesController? favorites;
+  final ValueChanged<List<Song>>? onSongsChanged;
   final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
 
   @override
@@ -315,6 +332,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _result = result;
       _isLoading = false;
     });
+    if (result.status == MusicScanStatus.success) {
+      widget.onSongsChanged?.call(result.songs);
+    }
   }
 
   @override
@@ -442,32 +462,291 @@ class _LibraryLoading extends StatelessWidget {
 }
 
 class PlaylistsScreen extends StatelessWidget {
-  const PlaylistsScreen({super.key});
+  const PlaylistsScreen({
+    required this.controller,
+    required this.availableSongs,
+    super.key,
+  });
+
+  final PlaylistsController controller;
+  final List<Song> availableSongs;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        if (controller.status == PlaylistsStatus.loading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
           children: [
-            Text('Your playlists', style: Theme.of(context).textTheme.titleLarge),
-            FilledButton.tonalIcon(
-              onPressed: () {},
-              icon: const Icon(Icons.add),
-              label: const Text('New'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Your playlists', style: Theme.of(context).textTheme.titleLarge),
+                FilledButton.tonalIcon(
+                  onPressed: () => _showPlaylistDialog(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('New'),
+                ),
+              ],
             ),
+            if (controller.status == PlaylistsStatus.error)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Text(
+                  controller.errorMessage ?? 'Could not load playlists.',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            const SizedBox(height: 20),
+            if (controller.playlists.isEmpty)
+              EmptyState(
+                icon: Icons.queue_music_rounded,
+                title: 'No playlists yet',
+                message: 'Create a playlist to keep your favorite moods together.',
+                actionLabel: 'Create playlist',
+                onAction: () => _showPlaylistDialog(context),
+              )
+            else
+              ...controller.playlists.map(
+                (playlist) => Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.queue_music_rounded),
+                    ),
+                    title: Text(playlist.name),
+                    subtitle: Text('${playlist.songIds.length} songs'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PlaylistDetailScreen(
+                          controller: controller,
+                          playlistId: playlist.id,
+                          availableSongs: availableSongs,
+                        ),
+                      ),
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'edit') _showPlaylistDialog(context, playlist);
+                        if (value == 'delete') _confirmDelete(context, playlist);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Edit name')),
+                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showPlaylistDialog(BuildContext context, [Playlist? playlist]) async {
+    final nameController = TextEditingController(text: playlist?.name ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(playlist == null ? 'New playlist' : 'Edit playlist'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(labelText: 'Name'),
+          onSubmitted: (_) => Navigator.pop(context, nameController.text),
         ),
-        const SizedBox(height: 20),
-        const EmptyState(
-          icon: Icons.queue_music_rounded,
-          title: 'No playlists yet',
-          message: 'Create a playlist to keep your favorite moods together.',
-          actionLabel: 'Create playlist',
-        ),
-      ],
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, nameController.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    if (name == null) return;
+    if (playlist == null) {
+      await controller.createPlaylist(name);
+    } else {
+      await controller.renamePlaylist(playlist.id, name);
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, Playlist playlist) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${playlist.name}?'),
+        content: const Text('This playlist and its song order will be removed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) await controller.deletePlaylist(playlist.id);
+  }
+}
+
+class PlaylistDetailScreen extends StatelessWidget {
+  const PlaylistDetailScreen({
+    required this.controller,
+    required this.playlistId,
+    required this.availableSongs,
+    super.key,
+  });
+
+  final PlaylistsController controller;
+  final String playlistId;
+  final List<Song> availableSongs;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final playlist = controller.findById(playlistId);
+        if (playlist == null) {
+          return const Scaffold(body: Center(child: Text('Playlist not found')));
+        }
+        final songs = controller.songsFor(playlist, availableSongs);
+        final missingCount = playlist.songIds.length - songs.length;
+        return Scaffold(
+          appBar: AppBar(title: Text(playlist.name)),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('${songs.length} available songs')),
+                    FilledButton.tonalIcon(
+                      onPressed: songs.isEmpty
+                          ? null
+                          : () => controller.playPlaylist(playlist.id, availableSongs),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Play'),
+                    ),
+                  ],
+                ),
+              ),
+              if (missingCount > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Text(
+                    '$missingCount song(s) are not available in the current library.',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+              Expanded(
+                child: ReorderableListView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                  itemCount: songs.length,
+                  // ignore: deprecated_member_use
+                  onReorder: (oldIndex, newIndex) {
+                    final oldSongId = playlist.songIds[oldIndex];
+                    final oldPlaylistIndex = playlist.songIds.indexOf(oldSongId);
+                    final newPlaylistIndex = newIndex >= playlist.songIds.length
+                        ? playlist.songIds.length
+                        : newIndex;
+                    controller.reorderSongs(playlist.id, oldPlaylistIndex, newPlaylistIndex);
+                  },
+                  itemBuilder: (context, index) {
+                    final song = songs[index];
+                    return ListTile(
+                      key: ValueKey(song.id),
+                      leading: SongArtwork(song: song, size: 48),
+                      title: Text(song.title),
+                      subtitle: Text(song.artist),
+                      trailing: IconButton(
+                        tooltip: 'Remove from playlist',
+                        onPressed: () => controller.removeSong(playlist.id, song.id),
+                        icon: const Icon(Icons.remove_circle_outline_rounded),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => _showSongSelector(context, playlist),
+            icon: const Icon(Icons.add),
+            label: const Text('Add songs'),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showSongSelector(BuildContext context, Playlist playlist) async {
+    final selectedIds = <String>{};
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final candidates = availableSongs
+              .where((song) => !playlist.songIds.contains(song.id))
+              .toList(growable: false);
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.75,
+              child: Column(
+                children: [
+                  const ListTile(
+                    title: Text('Add songs'),
+                    subtitle: Text('Select songs for this playlist'),
+                  ),
+                  Expanded(
+                    child: candidates.isEmpty
+                        ? const Center(child: Text('No other songs available'))
+                        : ListView.builder(
+                            itemCount: candidates.length,
+                            itemBuilder: (_, index) {
+                              final song = candidates[index];
+                              return CheckboxListTile(
+                                value: selectedIds.contains(song.id),
+                                onChanged: (selected) => setModalState(() {
+                                  if (selected == true) {
+                                    selectedIds.add(song.id);
+                                  } else {
+                                    selectedIds.remove(song.id);
+                                  }
+                                }),
+                                title: Text(song.title),
+                                subtitle: Text(song.artist),
+                              );
+                            },
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: FilledButton(
+                      onPressed: selectedIds.isEmpty
+                          ? null
+                          : () async {
+                              for (final song in candidates.where((song) => selectedIds.contains(song.id))) {
+                                await controller.addSong(playlist.id, song);
+                              }
+                              if (context.mounted) Navigator.pop(context);
+                            },
+                      child: Text('Add ${selectedIds.length} songs'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
