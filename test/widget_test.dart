@@ -25,6 +25,19 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
+  testWidgets('uses the light theme and switches appearance from Settings', (WidgetTester tester) async {
+    await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
+
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).theme!.brightness, Brightness.light);
+    await tester.tap(find.text('Settings'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Appearance'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.dark_mode_outlined).last);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode, ThemeMode.dark);
+  });
+
   testWidgets('navigates between the main sections', (WidgetTester tester) async {
     await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 

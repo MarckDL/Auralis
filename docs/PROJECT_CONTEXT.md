@@ -451,7 +451,7 @@ Este documento corresponde al contexto general de Auralis.
 
 El estado exacto del código debe comprobarse directamente en el repositorio antes de realizar cambios.
 
-Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 y 12. El reproductor
+Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 y 13. El reproductor
 usa `just_audio` en primer plano y `audio_service` para cola temporal, shuffle,
 repeat, avance automático, notificación multimedia y controles en segundo plano.
 Los favoritos y playlists se almacenan en SQLite desde Sprint 9, manteniendo sus
@@ -476,6 +476,9 @@ con widgets const, listas eficientes, `RepaintBoundary` y escrituras serializada
 Sprint 12 añade limpieza global del buscador, gesto ascendente del Mini Player,
 reproducción directa desde playlists y álbumes, modo edición exclusivo para playlists,
 búsqueda al agregar canciones, índice A-Z e indicadores visuales en estadísticas.
+Sprint 13 aplica un tema claro predeterminado con tema oscuro opcional, sistema de
+tarjetas redondeadas, sombras suaves, Mini Player flotante y navegación inferior tipo
+cápsula. Se mantiene el contraste y las áreas táctiles mínimas usando APIs nativas.
 
 ---
 

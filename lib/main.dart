@@ -32,62 +32,101 @@ Future<void> main() async {
   runApp(AuralisApp(playbackGateway: handler, database: database));
 }
 
-class AuralisApp extends StatelessWidget {
+class AuralisApp extends StatefulWidget {
   const AuralisApp({required this.playbackGateway, this.database, super.key});
 
   final PlaybackGateway playbackGateway;
   final AuralisDatabase? database;
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF9B8CFF),
-      brightness: Brightness.dark,
-    );
+  State<AuralisApp> createState() => _AuralisAppState();
+}
 
+class _AuralisAppState extends State<AuralisApp> {
+  ThemeMode _themeMode = ThemeMode.light;
+
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Auralis',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: colorScheme,
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF101018),
-        navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: const Color(0xFF171722),
-          height: 72,
-          indicatorColor: colorScheme.primary.withValues(alpha: 0.22),
-          labelTextStyle: WidgetStatePropertyAll(
-            TextStyle(color: colorScheme.onSurface),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xFF1B1B27),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: BorderSide.none,
-          ),
-        ),
-        listTileTheme: const ListTileThemeData(
-          minVerticalPadding: 8,
-          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(0, 48),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
-        ),
-        chipTheme: ChipThemeData(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          side: BorderSide.none,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        ),
+      theme: _auralisTheme(Brightness.light),
+      darkTheme: _auralisTheme(Brightness.dark),
+      themeMode: _themeMode,
+      home: AuralisShell(
+        playbackGateway: widget.playbackGateway,
+        database: widget.database,
+        themeMode: _themeMode,
+        onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
       ),
-      home: AuralisShell(playbackGateway: playbackGateway, database: database),
     );
   }
+}
+
+ThemeData _auralisTheme(Brightness brightness) {
+  final isLight = brightness == Brightness.light;
+  final scheme = ColorScheme.fromSeed(
+    seedColor: const Color(0xFF7657E8),
+    brightness: brightness,
+  );
+  final surface = isLight ? const Color(0xFFFFFFFF) : const Color(0xFF1B1B24);
+  return ThemeData(
+    colorScheme: scheme,
+    brightness: brightness,
+    useMaterial3: true,
+    scaffoldBackgroundColor: isLight ? const Color(0xFFF5F6F8) : const Color(0xFF101018),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      titleTextStyle: TextStyle(
+        color: scheme.onSurface,
+        fontSize: 25,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: surface,
+      elevation: isLight ? 0 : 2,
+      shadowColor: Colors.black.withValues(alpha: isLight ? 0.06 : 0.25),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: isLight ? const Color(0xFF171719) : const Color(0xFF171722),
+      height: 68,
+      indicatorColor: scheme.primary.withValues(alpha: 0.22),
+      labelTextStyle: WidgetStatePropertyAll(TextStyle(color: isLight ? Colors.white : scheme.onSurface)),
+      iconTheme: WidgetStatePropertyAll(IconThemeData(color: isLight ? Colors.white70 : scheme.onSurfaceVariant)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(22),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(22),
+        borderSide: BorderSide.none,
+      ),
+    ),
+    listTileTheme: const ListTileThemeData(
+      minVerticalPadding: 8,
+      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      side: BorderSide.none,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    ),
+  );
 }
 
 class MockSong {
@@ -138,10 +177,18 @@ const mockSongs = [
 ];
 
 class AuralisShell extends StatefulWidget {
-  const AuralisShell({required this.playbackGateway, this.database, super.key});
+  const AuralisShell({
+    required this.playbackGateway,
+    this.database,
+    this.themeMode = ThemeMode.light,
+    this.onThemeModeChanged,
+    super.key,
+  });
 
   final PlaybackGateway playbackGateway;
   final AuralisDatabase? database;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
 
   @override
   State<AuralisShell> createState() => _AuralisShellState();
@@ -262,6 +309,8 @@ class _AuralisShellState extends State<AuralisShell> {
       SettingsScreen(
         statistics: _statisticsController,
         sleepTimer: _sleepTimerController,
+        themeMode: widget.themeMode,
+        onThemeModeChanged: widget.onThemeModeChanged,
       ),
     ];
 
@@ -310,38 +359,56 @@ class _AuralisShellState extends State<AuralisShell> {
             favorites: _favoritesController,
             onTap: _openPlayer,
           ),
-          NavigationBar(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (index) {
-              setState(() {
-                if (_selectedIndex == 1 && index != 1) {
-                  _librarySearchQuery = '';
-                }
-                _selectedIndex = index;
-              });
-            },
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: 'Home',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              NavigationDestination(
-                icon: Icon(Icons.library_music_outlined),
-                selectedIcon: Icon(Icons.library_music_rounded),
-                label: 'Library',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: NavigationBar(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (index) {
+                    setState(() {
+                      if (_selectedIndex == 1 && index != 1) {
+                        _librarySearchQuery = '';
+                      }
+                      _selectedIndex = index;
+                    });
+                  },
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home_rounded),
+                      label: 'Home',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.library_music_outlined),
+                      selectedIcon: Icon(Icons.library_music_rounded),
+                      label: 'Library',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.queue_music_outlined),
+                      selectedIcon: Icon(Icons.queue_music_rounded),
+                      label: 'Playlists',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings_rounded),
+                      label: 'Settings',
+                    ),
+                  ],
+                ),
               ),
-              NavigationDestination(
-                icon: Icon(Icons.queue_music_outlined),
-                selectedIcon: Icon(Icons.queue_music_rounded),
-                label: 'Playlists',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings_rounded),
-                label: 'Settings',
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -1632,10 +1699,18 @@ class FavoritesScreen extends StatelessWidget {
 }
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({required this.statistics, required this.sleepTimer, super.key});
+  const SettingsScreen({
+    required this.statistics,
+    required this.sleepTimer,
+    required this.themeMode,
+    this.onThemeModeChanged,
+    super.key,
+  });
 
   final StatisticsController statistics;
   final SleepTimerController sleepTimer;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1644,10 +1719,20 @@ class SettingsScreen extends StatelessWidget {
       children: [
         Text('Preferences', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        const SettingsTile(
-          icon: Icons.dark_mode_outlined,
-          title: 'Appearance',
-          subtitle: 'Dark theme',
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('Appearance'),
+            subtitle: Text(themeMode == ThemeMode.dark ? 'Dark theme' : 'Light theme'),
+            trailing: SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined)),
+                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined)),
+              ],
+              selected: {themeMode == ThemeMode.dark ? ThemeMode.dark : ThemeMode.light},
+              onSelectionChanged: (selection) => onThemeModeChanged?.call(selection.first),
+            ),
+          ),
         ),
         const SettingsTile(
           icon: Icons.storage_outlined,
@@ -1985,7 +2070,14 @@ class PlayerScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
             child: Column(
               children: [
-                SongArtwork(song: song, size: 290),
+                Card(
+                  margin: EdgeInsets.zero,
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: SongArtwork(song: song, size: 290),
+                  ),
+                ),
                 const SizedBox(height: 28),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -2340,7 +2432,10 @@ class MiniPlayer extends StatelessWidget {
         if ((details.primaryVelocity ?? 0) < -250) onTap();
       },
       child: Card(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        elevation: 4,
+        shadowColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         child: ListTile(
           onTap: onTap,
           leading: SongArtwork(song: song, size: 44),
@@ -2439,12 +2534,13 @@ class SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right_rounded),
+    return Card(
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right_rounded),
+      ),
     );
   }
 }

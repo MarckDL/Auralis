@@ -731,6 +731,32 @@ Añadir:
 * Arquitectura.
 * Stack.
 * Funcionalidades.
+
+---
+
+# SPRINT 13 — Clean Soft UI
+
+## Estado
+
+Completado técnicamente: se aplicó un rediseño claro basado en tarjetas flotantes,
+bordes redondeados, sombras suaves, Mini Player destacado y navegación inferior
+flotante. El tema oscuro permanece disponible desde Settings y no se añadieron
+dependencias visuales nuevas.
+
+## Diseño
+
+* Fondo claro `#F5F6F8`.
+* Tarjetas blancas con radios amplios y elevación sutil.
+* Portadas redondeadas.
+* Tipografía con jerarquía entre títulos y metadatos.
+* Acentos violeta/azul para acciones principales.
+* Contraste y áreas táctiles compatibles con accesibilidad básica.
+
+## Alcance preservado
+
+Se conservaron reproducción, cola, background playback, favoritos, playlists,
+historial, estadísticas y Sleep Timer. No se incorporaron fuentes externas ni
+librerías visuales adicionales.
 * Instalación.
 * Decisiones técnicas.
 
