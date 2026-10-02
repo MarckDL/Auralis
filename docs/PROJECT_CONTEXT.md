@@ -451,7 +451,8 @@ Este documento corresponde al contexto general de Auralis.
 
 El estado exacto del código debe comprobarse directamente en el repositorio antes de realizar cambios.
 
-Actualmente el objetivo inicial es preparar el entorno de desarrollo y comenzar por Sprint 0.
+Actualmente Auralis tiene completados Sprint 0 y Sprint 1, y se encuentra en Sprint 2:
+escaneo de música local y presentación de metadatos reales en Library.
 
 ---
 

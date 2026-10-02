@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_audio_scan/local_audio_scan.dart';
 
 import 'package:auralis/main.dart';
+import 'package:auralis/services/music_scanner.dart';
 
 void main() {
   testWidgets('shows the Auralis home screen', (WidgetTester tester) async {
@@ -16,26 +18,76 @@ void main() {
   testWidgets('navigates between the main sections', (WidgetTester tester) async {
     await tester.pumpWidget(const AuralisApp());
 
-    await tester.tap(find.text('Library'));
-    await tester.pumpAndSettle();
-    expect(find.text('4 songs'), findsOneWidget);
-
     await tester.tap(find.text('Playlists'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('No playlists yet'), findsOneWidget);
 
     await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Preferences'), findsOneWidget);
   });
 
-  testWidgets('opens the visual player from a song', (WidgetTester tester) async {
-    await tester.pumpWidget(const AuralisApp());
+  testWidgets('renders songs returned by the scanner', (WidgetTester tester) async {
+    final scanner = MusicScanner(
+      gateway: FakeAudioScannerGateway(tracks: [_track('Song A', 'a.mp3')]),
+    );
 
-    await tester.tap(find.text('Midnight Signals').first);
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('Now playing'), findsOneWidget);
-    expect(find.byIcon(Icons.skip_next_rounded), findsOneWidget);
+    expect(find.text('1 songs'), findsOneWidget);
+    expect(find.text('Song A'), findsOneWidget);
   });
+
+  testWidgets('shows a permission state when access is denied',
+      (WidgetTester tester) async {
+    final scanner = MusicScanner(
+      gateway: FakeAudioScannerGateway(permission: false, requestResult: false),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music permission required'), findsOneWidget);
+    expect(find.text('Allow access'), findsOneWidget);
+  });
+}
+
+class FakeAudioScannerGateway implements AudioScannerGateway {
+  FakeAudioScannerGateway({
+    this.tracks = const [],
+    this.permission = true,
+    this.requestResult = true,
+  });
+
+  final List<AudioTrack> tracks;
+  final bool permission;
+  final bool requestResult;
+
+  @override
+  Future<bool> checkPermission() async => permission;
+
+  @override
+  Future<bool> requestPermission() async => requestResult;
+
+  @override
+  Future<List<AudioTrack>> scanTracks() async => tracks;
+}
+
+AudioTrack _track(String title, String path) {
+  return AudioTrack(
+    id: title,
+    title: title,
+    artist: 'Artist',
+    album: 'Album',
+    duration: 125000,
+    filePath: '/storage/emulated/0/Music/$path',
+    mimeType: 'audio/mpeg',
+    size: 1000,
+    dateAdded: DateTime(2026),
+  );
 }

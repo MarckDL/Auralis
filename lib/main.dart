@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'models/song.dart';
+import 'services/music_scanner.dart';
+
 void main() {
   runApp(const AuralisApp());
 }
@@ -114,7 +117,7 @@ class _AuralisShellState extends State<AuralisShell> {
   Widget build(BuildContext context) {
     final pages = [
       HomeScreen(onOpenPlayer: _openPlayer),
-      const LibraryScreen(),
+      LibraryScreen(),
       const PlaylistsScreen(),
       const SettingsScreen(),
     ];
@@ -221,8 +224,36 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class LibraryScreen extends StatelessWidget {
-  const LibraryScreen({super.key});
+class LibraryScreen extends StatefulWidget {
+  const LibraryScreen({this.scanner, super.key});
+
+  final MusicScanner? scanner;
+
+  @override
+  State<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends State<LibraryScreen> {
+  late final MusicScanner _scanner;
+  MusicScanResult? _result;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanner = widget.scanner ?? MusicScanner();
+    _loadLibrary();
+  }
+
+  Future<void> _loadLibrary() async {
+    setState(() => _isLoading = true);
+    final result = await _scanner.scan();
+    if (!mounted) return;
+    setState(() {
+      _result = result;
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -248,10 +279,70 @@ class LibraryScreen extends StatelessWidget {
               .toList(),
         ),
         const SizedBox(height: 22),
-        Text('4 songs', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        ...mockSongs.map((song) => SongCard(song: song)),
+        if (_isLoading)
+          const _LibraryLoading()
+        else
+          _buildResult(context, _result!),
       ],
+    );
+  }
+
+  Widget _buildResult(BuildContext context, MusicScanResult result) {
+    switch (result.status) {
+      case MusicScanStatus.success:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${result.songs.length} songs',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ...result.songs.map((song) => RealSongCard(song: song)),
+          ],
+        );
+      case MusicScanStatus.empty:
+        return EmptyState(
+          icon: Icons.library_music_outlined,
+          title: 'Your library is empty',
+          message: 'Add music to your device and scan again.',
+          actionLabel: 'Scan again',
+          onAction: _loadLibrary,
+        );
+      case MusicScanStatus.permissionDenied:
+        return EmptyState(
+          icon: Icons.lock_outline_rounded,
+          title: 'Music permission required',
+          message: 'Auralis needs access to your audio files to build Library.',
+          actionLabel: 'Allow access',
+          onAction: _loadLibrary,
+        );
+      case MusicScanStatus.error:
+        return EmptyState(
+          icon: Icons.error_outline_rounded,
+          title: 'Could not load your library',
+          message: result.message ?? 'Try scanning again.',
+          actionLabel: 'Retry',
+          onAction: _loadLibrary,
+        );
+    }
+  }
+}
+
+class _LibraryLoading extends StatelessWidget {
+  const _LibraryLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 80),
+      child: Column(
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 18),
+          Text('Scanning music on this device...'),
+        ],
+      ),
     );
   }
 }
@@ -412,6 +503,23 @@ class SongCard extends StatelessWidget {
   }
 }
 
+class RealSongCard extends StatelessWidget {
+  const RealSongCard({required this.song, super.key});
+
+  final Song song;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+      leading: SongArtwork(song: song, size: 52),
+      title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text('${song.artist} · ${song.album}'),
+      trailing: Text(song.durationLabel),
+    );
+  }
+}
+
 class AlbumCard extends StatelessWidget {
   const AlbumCard({
     required this.title,
@@ -474,6 +582,35 @@ class AlbumArtwork extends StatelessWidget {
   }
 }
 
+class SongArtwork extends StatelessWidget {
+  const SongArtwork({required this.song, required this.size, super.key});
+
+  final Song song;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    if (song.hasArtwork) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size > 70 ? 18 : 12),
+        child: Image.memory(
+          song.artwork!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallbackArtwork(),
+        ),
+      );
+    }
+    return _fallbackArtwork();
+  }
+
+  Widget _fallbackArtwork() {
+    final color = Colors.primaries[song.title.hashCode.abs() % Colors.primaries.length];
+    return AlbumArtwork(color: color, size: size);
+  }
+}
+
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({required this.onTap, super.key});
 
@@ -523,6 +660,7 @@ class EmptyState extends StatelessWidget {
     required this.title,
     required this.message,
     required this.actionLabel,
+    this.onAction,
     super.key,
   });
 
@@ -530,6 +668,7 @@ class EmptyState extends StatelessWidget {
   final String title;
   final String message;
   final String actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -543,7 +682,7 @@ class EmptyState extends StatelessWidget {
           const SizedBox(height: 8),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 22),
-          FilledButton(onPressed: () {}, child: Text(actionLabel)),
+          FilledButton(onPressed: onAction ?? () {}, child: Text(actionLabel)),
         ],
       ),
     );

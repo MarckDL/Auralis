@@ -107,6 +107,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
+  local_audio_scan:
+    dependency: "direct main"
+    description:
+      name: local_audio_scan
+      sha256: a45eac1eac3cba72806e435be000010f6da314fa16555aaeea6dbde075cdd585
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   matcher:
     dependency: transitive
     description:
@@ -139,6 +147,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
+  plugin_platform_interface:
+    dependency: transitive
+    description:
+      name: plugin_platform_interface
+      sha256: "4820fbfdb9478b1ebae27888254d445073732dae3d6ea81f0b7e06d5dedc3f02"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.8"
   sky_engine:
     dependency: transitive
     description: flutter

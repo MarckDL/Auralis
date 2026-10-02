@@ -131,6 +131,12 @@ La aplicación puede ejecutarse en el teléfono.
 
 # SPRINT 2 — Biblioteca musical local
 
+## Estado
+
+Implementado y pendiente de validación final en el teléfono físico. La biblioteca
+ya consulta audio local, solicita permisos, convierte metadatos a `Song` y muestra
+estados de carga, vacío, permiso rechazado y error.
+
 ## Objetivo
 
 Detectar archivos de música reales del dispositivo.
