@@ -485,15 +485,23 @@ El historial se registra correctamente.
 
 # SPRINT 9 — Base de datos
 
+## Estado
+
+Completado técnicamente: Auralis usa SQLite local mediante `sqflite` para canciones,
+artistas, álbumes, playlists, favoritos e historial. Los datos JSON de favoritos y
+playlists se migran una sola vez y los archivos originales se conservan como respaldo.
+La cola del reproductor continúa siendo temporal.
+
 ## Objetivo
 
 Construir una persistencia sólida.
 
 ## Tecnología candidata
 
-SQLite + Drift.
+SQLite + sqflite.
 
-La elección final debe verificarse según el estado actual de las librerías.
+Se eligió `sqflite` por su compatibilidad con Dart 3.13.4 y por mantener la
+implementación Android-first sin code generation.
 
 ## Tablas/entidades
 

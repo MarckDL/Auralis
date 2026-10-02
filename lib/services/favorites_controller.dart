@@ -6,10 +6,10 @@ import 'favorites_repository.dart';
 enum FavoritesStatus { idle, loading, ready, error }
 
 class FavoritesController extends ChangeNotifier {
-  FavoritesController({FavoritesRepository? repository})
+  FavoritesController({FavoritesStore? repository})
       : _repository = repository ?? FavoritesRepository();
 
-  final FavoritesRepository _repository;
+  final FavoritesStore _repository;
   final Set<String> _favoriteIds = <String>{};
   FavoritesStatus _status = FavoritesStatus.idle;
   String? _errorMessage;

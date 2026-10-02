@@ -7,7 +7,13 @@ import '../models/playlist.dart';
 
 typedef PlaylistsFileProvider = Future<File> Function();
 
-class PlaylistsRepository {
+abstract interface class PlaylistsStore {
+  Future<List<Playlist>> loadPlaylists();
+
+  Future<void> savePlaylists(List<Playlist> playlists);
+}
+
+class PlaylistsRepository implements PlaylistsStore {
   PlaylistsRepository({this._fileProvider});
 
   static const fileName = 'auralis_playlists.json';
@@ -15,6 +21,7 @@ class PlaylistsRepository {
 
   final PlaylistsFileProvider? _fileProvider;
 
+  @override
   Future<List<Playlist>> loadPlaylists() async {
     try {
       final file = await _file();
@@ -38,6 +45,7 @@ class PlaylistsRepository {
     }
   }
 
+  @override
   Future<void> savePlaylists(List<Playlist> playlists) async {
     final file = await _file();
     await file.parent.create(recursive: true);

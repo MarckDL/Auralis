@@ -12,6 +12,7 @@ import 'services/music_scanner.dart';
 import 'services/music_catalog.dart';
 import 'services/playlists_controller.dart';
 import 'services/history_controller.dart';
+import 'services/auralis_database.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,13 +25,16 @@ Future<void> main() async {
       androidStopForegroundOnPause: false,
     ),
   );
-  runApp(AuralisApp(playbackGateway: handler));
+  final database = await AuralisDatabase.open();
+  await database.migrateLegacyData();
+  runApp(AuralisApp(playbackGateway: handler, database: database));
 }
 
 class AuralisApp extends StatelessWidget {
-  const AuralisApp({required this.playbackGateway, super.key});
+  const AuralisApp({required this.playbackGateway, this.database, super.key});
 
   final PlaybackGateway playbackGateway;
+  final AuralisDatabase? database;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +67,7 @@ class AuralisApp extends StatelessWidget {
           ),
         ),
       ),
-      home: AuralisShell(playbackGateway: playbackGateway),
+      home: AuralisShell(playbackGateway: playbackGateway, database: database),
     );
   }
 }
@@ -116,9 +120,10 @@ const mockSongs = [
 ];
 
 class AuralisShell extends StatefulWidget {
-  const AuralisShell({required this.playbackGateway, super.key});
+  const AuralisShell({required this.playbackGateway, this.database, super.key});
 
   final PlaybackGateway playbackGateway;
+  final AuralisDatabase? database;
 
   @override
   State<AuralisShell> createState() => _AuralisShellState();
@@ -137,17 +142,23 @@ class _AuralisShellState extends State<AuralisShell> {
   @override
   void initState() {
     super.initState();
-    _historyController = HistoryController();
+    _historyController = HistoryController(
+      repository: widget.database?.historyStore,
+    );
     _playerController = PlayerController(
       gateway: widget.playbackGateway,
-      onSongStarted: (song) async => _historyController.record(song),
+      onSongStarted: _historyController.record,
     );
-    _favoritesController = FavoritesController();
+    _favoritesController = FavoritesController(
+      repository: widget.database?.favoritesStore,
+    );
     _playlistsController = PlaylistsController(
       playerController: _playerController,
+      repository: widget.database?.playlistsStore,
     );
     unawaited(_favoritesController.load());
     unawaited(_playlistsController.load());
+    unawaited(_historyController.load());
   }
 
   @override
@@ -156,6 +167,7 @@ class _AuralisShellState extends State<AuralisShell> {
     _historyController.dispose();
     _favoritesController.dispose();
     _playlistsController.dispose();
+    if (widget.database != null) unawaited(widget.database!.close());
     super.dispose();
   }
 
@@ -189,6 +201,7 @@ class _AuralisShellState extends State<AuralisShell> {
         favorites: _favoritesController,
         onSongsChanged: (songs) {
           if (mounted) setState(() => _availableSongs = songs);
+          if (widget.database != null) unawaited(widget.database!.upsertSongs(songs));
         },
         onSongSelected: _playSong,
       ),

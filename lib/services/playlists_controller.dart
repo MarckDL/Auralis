@@ -10,11 +10,11 @@ enum PlaylistsStatus { idle, loading, ready, error }
 class PlaylistsController extends ChangeNotifier {
   PlaylistsController({
     required this.playerController,
-    PlaylistsRepository? repository,
+    PlaylistsStore? repository,
   }) : _repository = repository ?? PlaylistsRepository();
 
   final PlayerController playerController;
-  final PlaylistsRepository _repository;
+  final PlaylistsStore _repository;
   List<Playlist> _playlists = const [];
   PlaylistsStatus _status = PlaylistsStatus.idle;
   String? _errorMessage;

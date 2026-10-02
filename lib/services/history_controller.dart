@@ -2,6 +2,12 @@ import 'package:flutter/foundation.dart';
 
 import '../models/song.dart';
 
+abstract interface class HistoryStore {
+  Future<List<HistoryEntry>> loadHistory();
+
+  Future<void> saveHistoryEntry(HistoryEntry entry);
+}
+
 class HistoryEntry {
   const HistoryEntry({
     required this.song,
@@ -23,7 +29,14 @@ class HistoryEntry {
 }
 
 class HistoryController extends ChangeNotifier {
+  HistoryController({HistoryStore? repository})
+      : _repository = repository ?? _MemoryHistoryStore();
+
+  final HistoryStore _repository;
   final List<HistoryEntry> _entries = <HistoryEntry>[];
+  bool _isLoading = false;
+
+  bool get isLoading => _isLoading;
 
   List<HistoryEntry> get entries => List.unmodifiable(_entries);
 
@@ -39,7 +52,17 @@ class HistoryController extends ChangeNotifier {
       });
   }
 
-  void record(Song song, {DateTime? now}) {
+  Future<void> load() async {
+    _isLoading = true;
+    notifyListeners();
+    _entries
+      ..clear()
+      ..addAll(await _repository.loadHistory());
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> record(Song song, {DateTime? now}) async {
     final playedAt = now ?? DateTime.now();
     final index = _entries.indexWhere((entry) => entry.song.id == song.id);
     if (index == -1) {
@@ -52,5 +75,25 @@ class HistoryController extends ChangeNotifier {
       );
     }
     notifyListeners();
+    await _repository.saveHistoryEntry(
+      _entries.firstWhere((entry) => entry.song.id == song.id),
+    );
+  }
+}
+
+class _MemoryHistoryStore implements HistoryStore {
+  final List<HistoryEntry> _entries = <HistoryEntry>[];
+
+  @override
+  Future<List<HistoryEntry>> loadHistory() async => List.unmodifiable(_entries);
+
+  @override
+  Future<void> saveHistoryEntry(HistoryEntry entry) async {
+    final index = _entries.indexWhere((item) => item.song.id == entry.song.id);
+    if (index == -1) {
+      _entries.add(entry);
+    } else {
+      _entries[index] = entry;
+    }
   }
 }

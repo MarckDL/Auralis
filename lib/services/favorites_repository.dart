@@ -5,7 +5,13 @@ import 'package:path_provider/path_provider.dart';
 
 typedef FavoritesFileProvider = Future<File> Function();
 
-class FavoritesRepository {
+abstract interface class FavoritesStore {
+  Future<Set<String>> loadFavoriteIds();
+
+  Future<void> saveFavoriteIds(Set<String> ids);
+}
+
+class FavoritesRepository implements FavoritesStore {
   FavoritesRepository({this._fileProvider});
 
   static const fileName = 'auralis_favorites.json';
@@ -13,6 +19,7 @@ class FavoritesRepository {
 
   final FavoritesFileProvider? _fileProvider;
 
+  @override
   Future<Set<String>> loadFavoriteIds() async {
     try {
       final file = await _file();
@@ -28,6 +35,7 @@ class FavoritesRepository {
     }
   }
 
+  @override
   Future<void> saveFavoriteIds(Set<String> ids) async {
     final file = await _file();
     await file.parent.create(recursive: true);
