@@ -673,7 +673,15 @@ No agregar animaciones únicamente por estética.
 
 ---
 
-# SPRINT 12 — Release
+# SPRINT 12 — UX/UI y Release
+
+## Estado
+
+Completado técnicamente: se reforzó la sincronización de posición y estadísticas,
+se implementó limpieza global de búsqueda, Mini Player interactivo con gesto
+ascendente, reproducción directa desde colecciones, edición explícita de playlists,
+búsqueda al agregar canciones, índice A-Z y tarjetas visuales de estadísticas.
+Se usaron APIs nativas de Flutter sin añadir nuevas dependencias.
 
 ## Objetivo
 

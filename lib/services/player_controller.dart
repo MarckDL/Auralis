@@ -183,12 +183,23 @@ class PlayerController extends ChangeNotifier {
   }
 
   void _onPlaybackState(PlaybackState state) {
+    final previousSong = _currentSong;
     _isPlaying = state.playing;
-    _position = state.updatePosition;
+    final rawPosition = state.updatePosition;
     if (state.queueIndex != null && state.queueIndex! < _songs.length) {
       _currentIndex = state.queueIndex!;
       _currentSong = _songs[_currentIndex];
       _duration = _currentSong!.duration;
+    }
+    if (previousSong?.id != _currentSong?.id && _currentSong != null) {
+      _position = Duration.zero;
+      onSeek?.call(_currentSong!, Duration.zero);
+    } else {
+      _position = rawPosition < Duration.zero
+          ? Duration.zero
+          : rawPosition > _duration && _duration > Duration.zero
+              ? _duration
+              : rawPosition;
     }
     _status = switch (state.processingState) {
       AudioProcessingState.idle => PlayerStatus.idle,

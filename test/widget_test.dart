@@ -79,8 +79,16 @@ void main() {
       gateway: FakeAudioScannerGateway(tracks: [_track('Song A', 'a.mp3')]),
     );
 
+    var cleared = false;
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+      MaterialApp(
+        home: Scaffold(
+          body: LibraryScreen(
+            scanner: scanner,
+            onSearchCleared: () => cleared = true,
+          ),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -89,6 +97,11 @@ void main() {
 
     expect(find.text('No matches found'), findsOneWidget);
     expect(find.text('Clear search'), findsOneWidget);
+    await tester.tap(find.text('Clear search'));
+    await tester.pump();
+    expect(find.byType(TextField), findsOneWidget);
+    expect((tester.widget<TextField>(find.byType(TextField)).controller?.text), isEmpty);
+    expect(cleared, isTrue);
   });
 
   testWidgets('shows persisted listening statistics', (WidgetTester tester) async {

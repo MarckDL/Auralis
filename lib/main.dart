@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
@@ -219,6 +220,11 @@ class _AuralisShellState extends State<AuralisShell> {
     });
   }
 
+  void _clearLibrarySearch() {
+    if (_librarySearchQuery.isEmpty) return;
+    setState(() => _librarySearchQuery = '');
+  }
+
   void _openHistory() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -242,6 +248,7 @@ class _AuralisShellState extends State<AuralisShell> {
       LibraryScreen(
         favorites: _favoritesController,
         initialSearchQuery: _librarySearchQuery,
+        onSearchCleared: _clearLibrarySearch,
         onSongsChanged: (songs) {
           if (mounted) setState(() => _availableSongs = songs);
           if (widget.database != null) unawaited(widget.database!.upsertSongs(songs));
@@ -306,7 +313,12 @@ class _AuralisShellState extends State<AuralisShell> {
           NavigationBar(
             selectedIndex: _selectedIndex,
             onDestinationSelected: (index) {
-              setState(() => _selectedIndex = index);
+              setState(() {
+                if (_selectedIndex == 1 && index != 1) {
+                  _librarySearchQuery = '';
+                }
+                _selectedIndex = index;
+              });
             },
             destinations: const [
               NavigationDestination(
@@ -575,6 +587,7 @@ class LibraryScreen extends StatefulWidget {
     this.onSongsChanged,
     this.onSongSelected,
     this.initialSearchQuery = '',
+    this.onSearchCleared,
     super.key,
   });
 
@@ -583,6 +596,7 @@ class LibraryScreen extends StatefulWidget {
   final ValueChanged<List<Song>>? onSongsChanged;
   final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
   final String initialSearchQuery;
+  final VoidCallback? onSearchCleared;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -667,6 +681,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
+                      widget.onSearchCleared?.call();
                     },
                     icon: const Icon(Icons.clear_rounded),
                   ),
@@ -706,6 +721,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             onAction: () {
               _searchController.clear();
               setState(() => _searchQuery = '');
+              widget.onSearchCleared?.call();
             },
           );
         }
@@ -725,8 +741,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            ...filteredSongs.map(
-              (song) => RealSongCard(
+            AlphabeticalList(
+              items: [...filteredSongs]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase())),
+              labelFor: (song) => song.title,
+              itemBuilder: (song) => RealSongCard(
                 song: song,
                 favorites: widget.favorites,
                 onTap: widget.onSongSelected == null
@@ -805,6 +823,90 @@ class _LibraryLoading extends StatelessWidget {
   }
 }
 
+class AlphabeticalList<T> extends StatefulWidget {
+  const AlphabeticalList({
+    required this.items,
+    required this.labelFor,
+    required this.itemBuilder,
+    super.key,
+  });
+
+  final List<T> items;
+  final String Function(T item) labelFor;
+  final Widget Function(T item) itemBuilder;
+
+  @override
+  State<AlphabeticalList<T>> createState() => _AlphabeticalListState<T>();
+}
+
+class _AlphabeticalListState<T> extends State<AlphabeticalList<T>> {
+  final _scrollController = ScrollController();
+
+  String _initial(String value) {
+    final first = value.trim().toUpperCase();
+    if (first.isEmpty) return '#';
+    return RegExp(r'[A-Z]').hasMatch(first[0]) ? first[0] : '#';
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = <String>{
+      for (final item in widget.items) _initial(widget.labelFor(item)),
+    }.toList()
+      ..sort();
+    return SizedBox(
+      height: 500,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              itemCount: widget.items.length,
+              itemBuilder: (_, index) => widget.itemBuilder(widget.items[index]),
+            ),
+          ),
+          SizedBox(
+            width: 24,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: initials.map((letter) {
+                final index = widget.items.indexWhere(
+                  (item) => _initial(widget.labelFor(item)) == letter,
+                );
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _scrollController.animateTo(
+                    (index * 76).clamp(0, _scrollController.position.maxScrollExtent).toDouble(),
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      letter,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class CategoryBrowseView extends StatelessWidget {
   const CategoryBrowseView({
     required this.category,
@@ -823,11 +925,10 @@ class CategoryBrowseView extends StatelessWidget {
   Widget build(BuildContext context) {
     final catalog = MusicCatalog(songs);
     if (category == 'Artists') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: catalog.artists
-            .map(
-              (artist) => Card(
+      return AlphabeticalList(
+        items: [...catalog.artists]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase())),
+        labelFor: (artist) => artist.name,
+        itemBuilder: (artist) => Card(
                 child: ListTile(
                   leading: SongArtwork(song: artist.songs.first, size: 52),
                   title: Text(artist.name),
@@ -851,8 +952,6 @@ class CategoryBrowseView extends StatelessWidget {
                   ),
                 ),
               ),
-            )
-            .toList(),
       );
     }
     if (category == 'Albums') {
@@ -1270,7 +1369,7 @@ class _PlaylistNameDialogState extends State<PlaylistNameDialog> {
   }
 }
 
-class PlaylistDetailScreen extends StatelessWidget {
+class PlaylistDetailScreen extends StatefulWidget {
   const PlaylistDetailScreen({
     required this.controller,
     required this.playlistId,
@@ -1281,6 +1380,17 @@ class PlaylistDetailScreen extends StatelessWidget {
   final PlaylistsController controller;
   final String playlistId;
   final List<Song> availableSongs;
+
+  @override
+  State<PlaylistDetailScreen> createState() => _PlaylistDetailScreenState();
+}
+
+class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
+  bool _editing = false;
+
+  PlaylistsController get controller => widget.controller;
+  String get playlistId => widget.playlistId;
+  List<Song> get availableSongs => widget.availableSongs;
 
   @override
   Widget build(BuildContext context) {
@@ -1294,7 +1404,16 @@ class PlaylistDetailScreen extends StatelessWidget {
         final songs = controller.songsFor(playlist, availableSongs);
         final missingCount = playlist.songIds.length - songs.length;
         return AuralisRouteScaffold(
-          appBar: AppBar(title: Text(playlist.name)),
+          appBar: AppBar(
+            title: Text(playlist.name),
+            actions: [
+              IconButton(
+                tooltip: _editing ? 'Done editing' : 'Edit playlist',
+                onPressed: () => setState(() => _editing = !_editing),
+                icon: Icon(_editing ? Icons.check_rounded : Icons.edit_rounded),
+              ),
+            ],
+          ),
           body: Column(
             children: [
               Padding(
@@ -1340,11 +1459,14 @@ class PlaylistDetailScreen extends StatelessWidget {
                       leading: SongArtwork(song: song, size: 48),
                       title: Text(song.title),
                       subtitle: Text(song.artist),
-                      trailing: IconButton(
-                        tooltip: 'Remove from playlist',
-                        onPressed: () => controller.removeSong(playlist.id, song.id),
-                        icon: const Icon(Icons.remove_circle_outline_rounded),
-                      ),
+                      trailing: _editing
+                          ? IconButton(
+                              tooltip: 'Remove from playlist',
+                              onPressed: () => controller.removeSong(playlist.id, song.id),
+                              icon: const Icon(Icons.remove_circle_outline_rounded),
+                            )
+                          : null,
+                      onTap: () => controller.playerController.playSong(song, songs),
                     );
                   },
                 ),
@@ -1363,14 +1485,20 @@ class PlaylistDetailScreen extends StatelessWidget {
 
   Future<void> _showSongSelector(BuildContext context, Playlist playlist) async {
     final selectedIds = <String>{};
+    final searchController = TextEditingController();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
+          final query = searchController.text.trim().toLowerCase();
           final candidates = availableSongs
               .where((song) => !playlist.songIds.contains(song.id))
+              .where((song) => query.isEmpty ||
+                  song.title.toLowerCase().contains(query) ||
+                  song.artist.toLowerCase().contains(query) ||
+                  song.album.toLowerCase().contains(query))
               .toList(growable: false);
           return SafeArea(
             child: SizedBox(
@@ -1381,9 +1509,20 @@ class PlaylistDetailScreen extends StatelessWidget {
                     title: Text('Add songs'),
                     subtitle: Text('Select songs for this playlist'),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: searchController,
+                      onChanged: (_) => setModalState(() {}),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'Search songs',
+                      ),
+                    ),
+                  ),
                   Expanded(
                     child: candidates.isEmpty
-                        ? const Center(child: Text('No other songs available'))
+                        ? const Center(child: Text('No matching songs available'))
                         : ListView.builder(
                             itemCount: candidates.length,
                             itemBuilder: (_, index) {
@@ -1424,6 +1563,7 @@ class PlaylistDetailScreen extends StatelessWidget {
         },
       ),
     );
+    searchController.dispose();
   }
 }
 
@@ -1577,31 +1717,42 @@ class StatisticsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text('Top artists', style: Theme.of(context).textTheme.titleLarge),
-              ..._sortedCounts(controller.topArtists).map(
-                    (entry) => ListTile(
-                      leading: const Icon(Icons.person_outline_rounded),
-                      title: Text(entry.key),
-                      trailing: Text('${entry.value}'),
-                    ),
-                  ),
+              ..._statCards(
+                context,
+                _sortedCounts(controller.topArtists),
+                icon: Icons.person_outline_rounded,
+              ),
               const SizedBox(height: 16),
               Text('Top genres', style: Theme.of(context).textTheme.titleLarge),
-              ..._sortedCounts(controller.topGenres).map(
-                    (entry) => ListTile(
-                      leading: const Icon(Icons.category_outlined),
-                      title: Text(entry.key),
-                      trailing: Text('${entry.value}'),
-                    ),
-                  ),
+              ..._statCards(
+                context,
+                _sortedCounts(controller.topGenres),
+                icon: Icons.category_outlined,
+              ),
               const SizedBox(height: 16),
               Text('Most played songs', style: Theme.of(context).textTheme.titleLarge),
               ...controller.mostPlayed.map(
-                    (entry) => ListTile(
-                      title: Text(entry.song.title),
-                      subtitle: Text(entry.song.artist),
-                      trailing: Text('${entry.playCount}'),
+                (entry) => Card(
+                  child: ListTile(
+                    leading: SongArtwork(song: entry.song, size: 48),
+                    title: Text(entry.song.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.song.artist),
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(
+                          value: controller.mostPlayed.first.playCount == 0
+                              ? 0
+                              : entry.playCount / controller.mostPlayed.first.playCount,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ],
                     ),
+                    trailing: Text('${entry.playCount}'),
                   ),
+                ),
+              ),
               if (controller.errorMessage != null)
                 Text(
                   controller.errorMessage!,
@@ -1613,6 +1764,32 @@ class StatisticsScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+List<Widget> _statCards(
+  BuildContext context,
+  List<MapEntry<String, int>> entries, {
+  required IconData icon,
+}) {
+  final maximum = entries.isEmpty ? 1 : entries.first.value;
+  return entries
+      .map(
+        (entry) => Card(
+          child: ListTile(
+            leading: CircleAvatar(child: Icon(icon)),
+            title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: LinearProgressIndicator(
+                value: entry.value / maximum,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            trailing: Text('${entry.value}'),
+          ),
+        ),
+      )
+      .toList(growable: false);
 }
 
 class HistoryScreen extends StatelessWidget {
@@ -1682,10 +1859,15 @@ Future<void> showSleepTimerSheet(
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    builder: (sheetContext) => SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: [
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
           const ListTile(
             title: Text('Sleep timer'),
             subtitle: Text('Stop playback automatically'),
@@ -1721,7 +1903,9 @@ Future<void> showSleepTimerSheet(
                 Navigator.pop(sheetContext);
               },
             ),
-        ],
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -1989,8 +2173,18 @@ class RealSongCard extends StatelessWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(vertical: 4),
         leading: SongArtwork(song: song, size: 52),
-        title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text('${song.artist} · ${song.album}'),
+        title: Text(
+          song.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          '${song.artist} · ${song.album}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2141,27 +2335,35 @@ class MiniPlayer extends StatelessWidget {
     final song = controller.currentSong;
     if (song == null) return const SizedBox.shrink();
 
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: ListTile(
-        onTap: onTap,
-        leading: SongArtwork(song: song, size: 44),
-        title: Text(song.title),
-        subtitle: Text(song.artist),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FavoriteButton(song: song, favorites: favorites),
-            IconButton(
-              onPressed: controller.togglePlayPause,
-              tooltip: controller.isPlaying ? 'Pause' : 'Play',
-              icon: Icon(
-                controller.isPlaying
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
+    return GestureDetector(
+      onVerticalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) < -250) onTap();
+      },
+      child: Card(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: ListTile(
+          onTap: onTap,
+          leading: SongArtwork(song: song, size: 44),
+          title: Text(song.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text(
+            song.artist,
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FavoriteButton(song: song, favorites: favorites),
+              IconButton(
+                onPressed: controller.togglePlayPause,
+                tooltip: controller.isPlaying ? 'Pause' : 'Play',
+                icon: Icon(
+                  controller.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
