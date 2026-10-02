@@ -8,6 +8,8 @@ import 'package:local_audio_scan/local_audio_scan.dart';
 import 'package:auralis/main.dart';
 import 'package:auralis/models/song.dart';
 import 'package:auralis/services/audio_handler.dart';
+import 'package:auralis/services/favorites_controller.dart';
+import 'package:auralis/services/favorites_repository.dart';
 import 'package:auralis/services/music_scanner.dart';
 
 void main() {
@@ -104,6 +106,102 @@ void main() {
     );
     expect(find.text('Unknown genre'), findsOneWidget);
   });
+
+  testWidgets('plays the complete artist collection from its detail', (tester) async {
+    final songs = [
+      _catalogSong('a', 'Luna Vale', 'Afterglow'),
+      _catalogSong('b', 'Luna Vale', 'Afterglow'),
+    ];
+    List<Song>? selectedQueue;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ArtistDetailScreen(
+          artist: 'Luna Vale',
+          songs: songs,
+          onSongSelected: (song, queue) async => selectedQueue = queue,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Play all'));
+    expect(selectedQueue, songs);
+    await tester.tap(find.text('Song b'));
+    expect(selectedQueue, songs);
+  });
+
+  testWidgets('plays the complete genre collection from its detail', (tester) async {
+    final songs = [
+      _catalogSong('a', 'Artist A', 'Album A'),
+      _catalogSong('b', 'Artist B', 'Album B'),
+    ];
+    List<Song>? selectedQueue;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GenreDetailScreen(
+          genre: 'Unknown genre',
+          songs: songs,
+          onSongSelected: (song, queue) async => selectedQueue = queue,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Play all'));
+    expect(selectedQueue, songs);
+    await tester.tap(find.text('Song b'));
+    expect(selectedQueue, songs);
+  });
+
+  testWidgets('plays the complete album and favorites collections', (tester) async {
+    final songs = [
+      _catalogSong('a', 'Luna Vale', 'Afterglow'),
+      _catalogSong('b', 'Luna Vale', 'Afterglow'),
+    ];
+    List<Song>? selectedQueue;
+    final favorites = FavoritesController(repository: _MemoryFavoritesRepository());
+    await favorites.addFavorite(songs[0]);
+    await favorites.addFavorite(songs[1]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AlbumDetailScreen(
+          albumId: 'luna vale\u0000afterglow',
+          songs: songs,
+          onSongSelected: (song, queue) async => selectedQueue = queue,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Play album'));
+    expect(selectedQueue, songs);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FavoritesScreen(
+          songs: songs,
+          favorites: favorites,
+          onSongSelected: (song, queue) async => selectedQueue = queue,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Play favorites'));
+    expect(selectedQueue, songs);
+  });
+}
+
+class _MemoryFavoritesRepository extends FavoritesRepository {
+  final Set<String> ids = <String>{};
+
+  @override
+  Future<Set<String>> loadFavoriteIds() async => Set<String>.of(ids);
+
+  @override
+  Future<void> saveFavoriteIds(Set<String> value) async {
+    ids
+      ..clear()
+      ..addAll(value);
+  }
 }
 
 class FakeAudioScannerGateway implements AudioScannerGateway {

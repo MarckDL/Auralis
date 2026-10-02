@@ -447,6 +447,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         builder: (_) => FavoritesScreen(
           songs: songs,
           favorites: widget.favorites!,
+          onSongSelected: widget.onSongSelected,
         ),
       ),
     );
@@ -498,6 +499,13 @@ class CategoryBrowseView extends StatelessWidget {
                   leading: SongArtwork(song: artist.songs.first, size: 52),
                   title: Text(artist.name),
                   subtitle: Text('${artist.songs.length} songs'),
+                  trailing: IconButton(
+                    tooltip: 'Play all',
+                    onPressed: onSongSelected == null || artist.songs.isEmpty
+                        ? null
+                        : () => onSongSelected!(artist.songs.first, artist.songs),
+                    icon: const Icon(Icons.play_arrow_rounded),
+                  ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => ArtistDetailScreen(
@@ -524,6 +532,13 @@ class CategoryBrowseView extends StatelessWidget {
                   leading: SongArtwork(song: album.songs.first, size: 52),
                   title: Text(album.name),
                   subtitle: Text('${album.artist} · ${album.songs.length} songs'),
+                  trailing: IconButton(
+                    tooltip: 'Play album',
+                    onPressed: onSongSelected == null || album.songs.isEmpty
+                        ? null
+                        : () => onSongSelected!(album.songs.first, album.songs),
+                    icon: const Icon(Icons.play_arrow_rounded),
+                  ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => AlbumDetailScreen(
@@ -549,6 +564,13 @@ class CategoryBrowseView extends StatelessWidget {
                 leading: const CircleAvatar(child: Icon(Icons.category_rounded)),
                 title: Text(genre.name),
                 subtitle: Text('${genre.songs.length} songs'),
+                trailing: IconButton(
+                  tooltip: 'Play all',
+                  onPressed: onSongSelected == null || genre.songs.isEmpty
+                      ? null
+                      : () => onSongSelected!(genre.songs.first, genre.songs),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                ),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => GenreDetailScreen(
@@ -591,6 +613,14 @@ class ArtistDetailScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
           Text('${artistSongs.length} songs', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: artistSongs.isEmpty || onSongSelected == null
+                ? null
+                : () => onSongSelected!(artistSongs.first, artistSongs),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Play all'),
+          ),
           if (albums.isNotEmpty) ...[
             const SizedBox(height: 20),
             Text('Albums', style: Theme.of(context).textTheme.titleLarge),
@@ -703,6 +733,14 @@ class GenreDetailScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
           Text('${genreSongs.length} songs', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: genreSongs.isEmpty || onSongSelected == null
+                ? null
+                : () => onSongSelected!(genreSongs.first, genreSongs),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Play all'),
+          ),
           const SizedBox(height: 12),
           ...genreSongs.map(
             (song) => RealSongCard(
@@ -1060,11 +1098,13 @@ class FavoritesScreen extends StatelessWidget {
   const FavoritesScreen({
     required this.songs,
     required this.favorites,
+    this.onSongSelected,
     super.key,
   });
 
   final List<Song> songs;
   final FavoritesController favorites;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1084,13 +1124,33 @@ class FavoritesScreen extends StatelessWidget {
               actionLabel: 'Back to library',
             );
           }
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-            itemCount: favoriteSongs.length,
-            itemBuilder: (context, index) => RealSongCard(
-              song: favoriteSongs[index],
-              favorites: favorites,
-            ),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: FilledButton.icon(
+                  onPressed: onSongSelected == null
+                      ? null
+                      : () => onSongSelected!(favoriteSongs.first, favoriteSongs),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Play favorites'),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                  itemCount: favoriteSongs.length,
+                  itemBuilder: (context, index) => RealSongCard(
+                    song: favoriteSongs[index],
+                    favorites: favorites,
+                    onTap: onSongSelected == null
+                        ? null
+                        : () => onSongSelected!(favoriteSongs[index], favoriteSongs),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),

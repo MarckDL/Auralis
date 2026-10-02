@@ -395,6 +395,9 @@ y géneros; cada categoría tiene detalle y puede iniciar reproducción usando l
 actual. Las agrupaciones se calculan en memoria y usan `Unknown genre` porque
 `local_audio_scan 2.0.0` no expone ese metadato.
 
+Hotfix aplicado: la reproducción desde artistas, álbumes, géneros y favoritos
+ahora conserva la colección completa como cola, incluyendo las acciones Play all.
+
 ## Objetivo
 
 Organizar la biblioteca de forma más completa.
