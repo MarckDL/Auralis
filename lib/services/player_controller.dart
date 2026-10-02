@@ -1,35 +1,26 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/song.dart';
-import 'audio_player_service.dart';
+import 'audio_handler.dart';
 
 enum PlayerStatus { idle, loading, ready, error }
 
 class PlayerController extends ChangeNotifier {
-  PlayerController({AudioEngine? engine})
-      : _engine = engine ?? JustAudioEngine() {
+  PlayerController({required this._gateway}) {
     _subscriptions = [
-      _engine.playingStream.listen((playing) {
-        _isPlaying = playing;
+      _gateway.playbackStateStream.listen(_onPlaybackState),
+      _gateway.mediaItemStream.listen(_onMediaItem),
+      _gateway.queueStream.listen((items) {
+        if (items.isEmpty) return;
         notifyListeners();
-      }),
-      _engine.positionStream.listen((position) {
-        _position = position;
-        notifyListeners();
-      }),
-      _engine.durationStream.listen((duration) {
-        if (duration != null) _duration = duration;
-        notifyListeners();
-      }),
-      _engine.errorStream.listen((error) {
-        _setError(error.message);
       }),
     ];
   }
 
-  final AudioEngine _engine;
+  final PlaybackGateway _gateway;
   late final List<StreamSubscription<Object?>> _subscriptions;
   List<Song> _songs = const [];
   int _currentIndex = -1;
@@ -39,7 +30,8 @@ class PlayerController extends ChangeNotifier {
   Duration _duration = Duration.zero;
   PlayerStatus _status = PlayerStatus.idle;
   String? _errorMessage;
-  bool _isDisposed = false;
+  AudioServiceShuffleMode _shuffleMode = AudioServiceShuffleMode.none;
+  AudioServiceRepeatMode _repeatMode = AudioServiceRepeatMode.none;
 
   Song? get currentSong => _currentSong;
   List<Song> get currentSongs => List.unmodifiable(_songs);
@@ -49,6 +41,8 @@ class PlayerController extends ChangeNotifier {
   Duration get duration => _duration;
   PlayerStatus get status => _status;
   String? get errorMessage => _errorMessage;
+  AudioServiceShuffleMode get shuffleMode => _shuffleMode;
+  AudioServiceRepeatMode get repeatMode => _repeatMode;
 
   Future<void> playSong(Song song, List<Song> songs) async {
     final index = songs.indexWhere((item) => item.id == song.id);
@@ -62,14 +56,9 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final loadedDuration = await _engine.setFilePath(song.path);
-      if (_isDisposed) return;
-      if (loadedDuration != null) _duration = loadedDuration;
-      _status = PlayerStatus.ready;
-      notifyListeners();
-      await _engine.play();
+      await _gateway.setQueue(_songs, _currentIndex);
+      await _gateway.play();
     } catch (error) {
-      if (_isDisposed) return;
       _setError(_readableError(error));
     }
   }
@@ -77,7 +66,7 @@ class PlayerController extends ChangeNotifier {
   Future<void> play() async {
     if (_currentSong == null) return;
     try {
-      await _engine.play();
+      await _gateway.play();
     } catch (error) {
       _setError(_readableError(error));
     }
@@ -85,7 +74,7 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> pause() async {
     try {
-      await _engine.pause();
+      await _gateway.pause();
     } catch (error) {
       _setError(_readableError(error));
     }
@@ -100,7 +89,7 @@ class PlayerController extends ChangeNotifier {
             ? duration
             : position;
     try {
-      await _engine.seek(safePosition);
+      await _gateway.seek(safePosition);
       _position = safePosition;
       notifyListeners();
     } catch (error) {
@@ -109,17 +98,94 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> next() async {
-    if (_songs.isEmpty || _currentIndex >= _songs.length - 1) return;
-    await playSong(_songs[_currentIndex + 1], _songs);
+    if (_songs.isEmpty) return;
+    try {
+      await _gateway.skipToNext();
+    } catch (error) {
+      _setError(_readableError(error));
+    }
   }
 
   Future<void> previous() async {
     if (_songs.isEmpty) return;
-    if (_currentIndex <= 0) {
+    if (_position > const Duration(seconds: 3)) {
       await seek(Duration.zero);
       return;
     }
-    await playSong(_songs[_currentIndex - 1], _songs);
+    try {
+      await _gateway.skipToPrevious();
+    } catch (error) {
+      _setError(_readableError(error));
+    }
+  }
+
+  Future<void> setShuffleMode(AudioServiceShuffleMode mode) async {
+    try {
+      await _gateway.setShuffleMode(mode);
+      _shuffleMode = mode;
+      notifyListeners();
+    } catch (error) {
+      _setError(_readableError(error));
+    }
+  }
+
+  Future<void> toggleShuffle() => setShuffleMode(
+        _shuffleMode == AudioServiceShuffleMode.none
+            ? AudioServiceShuffleMode.all
+            : AudioServiceShuffleMode.none,
+      );
+
+  Future<void> setRepeatMode(AudioServiceRepeatMode mode) async {
+    try {
+      await _gateway.setRepeatMode(mode);
+      _repeatMode = mode;
+      notifyListeners();
+    } catch (error) {
+      _setError(_readableError(error));
+    }
+  }
+
+  Future<void> cycleRepeatMode() {
+    final nextMode = switch (_repeatMode) {
+      AudioServiceRepeatMode.none => AudioServiceRepeatMode.all,
+      AudioServiceRepeatMode.all => AudioServiceRepeatMode.one,
+      AudioServiceRepeatMode.one || AudioServiceRepeatMode.group =>
+        AudioServiceRepeatMode.none,
+    };
+    return setRepeatMode(nextMode);
+  }
+
+  void _onPlaybackState(PlaybackState state) {
+    _isPlaying = state.playing;
+    _position = state.updatePosition;
+    if (state.queueIndex != null && state.queueIndex! < _songs.length) {
+      _currentIndex = state.queueIndex!;
+      _currentSong = _songs[_currentIndex];
+      _duration = _currentSong!.duration;
+    }
+    _status = switch (state.processingState) {
+      AudioProcessingState.idle => PlayerStatus.idle,
+      AudioProcessingState.loading || AudioProcessingState.buffering =>
+        PlayerStatus.loading,
+      AudioProcessingState.ready || AudioProcessingState.completed =>
+        PlayerStatus.ready,
+      AudioProcessingState.error => PlayerStatus.error,
+    };
+    if (state.processingState == AudioProcessingState.error ||
+        state.errorCode != null) {
+      _errorMessage = state.errorMessage ?? 'Unable to play this song.';
+    }
+    notifyListeners();
+  }
+
+  void _onMediaItem(MediaItem? item) {
+    if (item == null) return;
+    final index = _songs.indexWhere((song) => song.id == item.id);
+    if (index == -1) return;
+    _currentIndex = index;
+    _currentSong = _songs[index];
+    _duration = item.duration ?? _currentSong!.duration;
+    notifyListeners();
   }
 
   void _setError(String message) {
@@ -136,11 +202,9 @@ class PlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _isDisposed = true;
     for (final subscription in _subscriptions) {
-      subscription.cancel();
+      unawaited(subscription.cancel());
     }
-    unawaited(_engine.dispose());
     super.dispose();
   }
 }

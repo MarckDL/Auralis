@@ -1,15 +1,29 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
 import 'models/song.dart';
+import 'services/audio_handler.dart';
 import 'services/player_controller.dart';
 import 'services/music_scanner.dart';
 
-void main() {
-  runApp(const AuralisApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final handler = await AudioService.init(
+    builder: AuralisAudioHandler.new,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.auralis.auralis.playback',
+      androidNotificationChannelName: 'Auralis Playback',
+      androidNotificationChannelDescription: 'Controls for Auralis playback',
+      androidStopForegroundOnPause: false,
+    ),
+  );
+  runApp(AuralisApp(playbackGateway: handler));
 }
 
 class AuralisApp extends StatelessWidget {
-  const AuralisApp({super.key});
+  const AuralisApp({required this.playbackGateway, super.key});
+
+  final PlaybackGateway playbackGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +56,7 @@ class AuralisApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuralisShell(),
+      home: AuralisShell(playbackGateway: playbackGateway),
     );
   }
 }
@@ -95,7 +109,9 @@ const mockSongs = [
 ];
 
 class AuralisShell extends StatefulWidget {
-  const AuralisShell({super.key});
+  const AuralisShell({required this.playbackGateway, super.key});
+
+  final PlaybackGateway playbackGateway;
 
   @override
   State<AuralisShell> createState() => _AuralisShellState();
@@ -110,7 +126,7 @@ class _AuralisShellState extends State<AuralisShell> {
   @override
   void initState() {
     super.initState();
-    _playerController = PlayerController();
+    _playerController = PlayerController(gateway: widget.playbackGateway);
   }
 
   @override
@@ -521,6 +537,14 @@ class PlayerScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     IconButton(
+                      onPressed: controller.toggleShuffle,
+                      tooltip: 'Shuffle',
+                      color: controller.shuffleMode == AudioServiceShuffleMode.all
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                      icon: const Icon(Icons.shuffle_rounded),
+                    ),
+                    IconButton(
                       onPressed: controller.previous,
                       iconSize: 36,
                       icon: const Icon(Icons.skip_previous_rounded),
@@ -546,13 +570,62 @@ class PlayerScreen extends StatelessWidget {
                       iconSize: 36,
                       icon: const Icon(Icons.skip_next_rounded),
                     ),
+                    IconButton(
+                      onPressed: controller.cycleRepeatMode,
+                      tooltip: 'Repeat',
+                      color: controller.repeatMode == AudioServiceRepeatMode.none
+                          ? null
+                          : Theme.of(context).colorScheme.primary,
+                      icon: Icon(
+                        controller.repeatMode == AudioServiceRepeatMode.one
+                            ? Icons.repeat_one_rounded
+                            : Icons.repeat_rounded,
+                      ),
+                    ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _showQueue(context),
+                  icon: const Icon(Icons.queue_music_rounded),
+                  label: Text('Queue (${controller.currentSongs.length})'),
                 ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  void _showQueue(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            const ListTile(
+              title: Text('Play queue'),
+              subtitle: Text('Temporary queue for this session'),
+            ),
+            ...controller.currentSongs.asMap().entries.map(
+                  (entry) => ListTile(
+                    selected: entry.key == controller.currentIndex,
+                    leading: SongArtwork(song: entry.value, size: 44),
+                    title: Text(entry.value.title),
+                    subtitle: Text(entry.value.artist),
+                    onTap: () {
+                      Navigator.pop(context);
+                      controller.playSong(entry.value, controller.currentSongs);
+                    },
+                  ),
+                ),
+          ],
+        ),
+      ),
     );
   }
 

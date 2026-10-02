@@ -1,28 +1,29 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:auralis/models/song.dart';
-import 'package:auralis/services/audio_player_service.dart';
+import 'package:auralis/services/audio_handler.dart';
 import 'package:auralis/services/player_controller.dart';
 
 void main() {
-  late FakeAudioEngine engine;
+  late FakePlaybackGateway gateway;
   late PlayerController controller;
 
   setUp(() {
-    engine = FakeAudioEngine();
-    controller = PlayerController(engine: engine);
+    gateway = FakePlaybackGateway();
+    controller = PlayerController(gateway: gateway);
   });
 
-  tearDown(() {
-    controller.dispose();
-  });
+  tearDown(() => controller.dispose());
 
-  test('plays the selected song and exposes its state', () async {
+  test('builds a queue and plays the selected song', () async {
     await controller.playSong(songA, [songA, songB]);
     await _flushStreams();
 
+    expect(gateway.queue, [songA, songB]);
+    expect(gateway.initialIndex, 0);
     expect(controller.currentSong, songA);
     expect(controller.status, PlayerStatus.ready);
     expect(controller.isPlaying, isTrue);
@@ -33,116 +34,125 @@ void main() {
     await controller.pause();
     await controller.play();
     await controller.seek(const Duration(seconds: 12));
-    await _flushStreams();
 
     expect(controller.isPlaying, isTrue);
     expect(controller.position, const Duration(seconds: 12));
-    expect(engine.lastSeek, const Duration(seconds: 12));
+    expect(gateway.lastSeek, const Duration(seconds: 12));
   });
 
-  test('moves to next and previous songs', () async {
+  test('next and previous navigate the queue', () async {
     await controller.playSong(songA, [songA, songB]);
     await controller.next();
+    await _flushStreams();
     expect(controller.currentSong, songB);
 
     await controller.previous();
+    await _flushStreams();
     expect(controller.currentSong, songA);
   });
 
-  test('previous at the beginning seeks to zero', () async {
+  test('previous after three seconds seeks to the beginning', () async {
     await controller.playSong(songA, [songA, songB]);
     await controller.seek(const Duration(seconds: 18));
     await controller.previous();
 
     expect(controller.currentSong, songA);
-    expect(engine.lastSeek, Duration.zero);
+    expect(gateway.lastSeek, Duration.zero);
   });
 
-  test('reports an engine error', () async {
+  test('shuffle and repeat are forwarded to the handler', () async {
+    await controller.setShuffleMode(AudioServiceShuffleMode.all);
+    await controller.setRepeatMode(AudioServiceRepeatMode.one);
+
+    expect(controller.shuffleMode, AudioServiceShuffleMode.all);
+    expect(controller.repeatMode, AudioServiceRepeatMode.one);
+    expect(gateway.shuffleMode, AudioServiceShuffleMode.all);
+    expect(gateway.repeatMode, AudioServiceRepeatMode.one);
+  });
+
+  test('reports a playback error', () async {
     await controller.playSong(songA, [songA]);
-    engine.emitError('File cannot be played');
+    gateway.emitError('File cannot be played');
     await _flushStreams();
 
     expect(controller.status, PlayerStatus.error);
     expect(controller.errorMessage, 'File cannot be played');
     expect(controller.isPlaying, isFalse);
   });
-
 }
 
 const songA = Song(
-  id: 'a',
-  title: 'Song A',
-  artist: 'Artist',
-  album: 'Album',
-  duration: Duration(minutes: 3),
-  path: '/music/a.mp3',
-  format: 'mp3',
+  id: 'a', title: 'Song A', artist: 'Artist', album: 'Album',
+  duration: Duration(minutes: 3), path: '/music/a.mp3', format: 'mp3',
   mimeType: 'audio/mpeg',
 );
-
 const songB = Song(
-  id: 'b',
-  title: 'Song B',
-  artist: 'Artist',
-  album: 'Album',
-  duration: Duration(minutes: 4),
-  path: '/music/b.mp3',
-  format: 'mp3',
+  id: 'b', title: 'Song B', artist: 'Artist', album: 'Album',
+  duration: Duration(minutes: 4), path: '/music/b.mp3', format: 'mp3',
   mimeType: 'audio/mpeg',
 );
 
 Future<void> _flushStreams() => Future<void>.delayed(Duration.zero);
 
-class FakeAudioEngine implements AudioEngine {
-  final _playing = StreamController<bool>.broadcast();
-  final _position = StreamController<Duration>.broadcast();
-  final _duration = StreamController<Duration?>.broadcast();
-  final _errors = StreamController<AudioEngineError>.broadcast();
-  Duration? loadedDuration;
+class FakePlaybackGateway implements PlaybackGateway {
+  final _playback = StreamController<PlaybackState>.broadcast();
+  final _media = StreamController<MediaItem?>.broadcast();
+  final _queueStream = StreamController<List<MediaItem>>.broadcast();
+  List<Song> queue = const [];
+  int initialIndex = -1;
+  int currentIndex = -1;
+  bool playing = false;
+  Duration position = Duration.zero;
   Duration? lastSeek;
+  AudioServiceShuffleMode shuffleMode = AudioServiceShuffleMode.none;
+  AudioServiceRepeatMode repeatMode = AudioServiceRepeatMode.none;
+
+  @override Stream<PlaybackState> get playbackStateStream => _playback.stream;
+  @override Stream<MediaItem?> get mediaItemStream => _media.stream;
+  @override Stream<List<MediaItem>> get queueStream => _queueStream.stream;
 
   @override
-  Stream<bool> get playingStream => _playing.stream;
-
-  @override
-  Stream<Duration> get positionStream => _position.stream;
-
-  @override
-  Stream<Duration?> get durationStream => _duration.stream;
-
-  @override
-  Stream<AudioEngineError> get errorStream => _errors.stream;
-
-  @override
-  Future<Duration?> setFilePath(String path) async {
-    loadedDuration = const Duration(minutes: 3);
-    _duration.add(loadedDuration);
-    return loadedDuration;
+  Future<void> setQueue(List<Song> songs, int index) async {
+    queue = List.of(songs);
+    initialIndex = index;
+    currentIndex = index;
+    _queueStream.add(songs.map(_item).toList());
+    _media.add(_item(songs[index]));
+    _emit(AudioProcessingState.ready);
   }
 
   @override
-  Future<void> play() async => _playing.add(true);
-
+  Future<void> play() async { playing = true; _emit(AudioProcessingState.ready); }
   @override
-  Future<void> pause() async => _playing.add(false);
-
+  Future<void> pause() async { playing = false; _emit(AudioProcessingState.ready); }
   @override
-  Future<void> seek(Duration position) async {
-    lastSeek = position;
-    _position.add(position);
+  Future<void> seek(Duration value) async { position = value; lastSeek = value; _emit(AudioProcessingState.ready); }
+  @override
+  Future<void> skipToNext() async {
+    if (currentIndex < queue.length - 1) currentIndex++;
+    _media.add(_item(queue[currentIndex]));
+    _emit(AudioProcessingState.ready);
   }
-
   @override
-  Future<void> stop() async => _playing.add(false);
-
-  @override
-  Future<void> dispose() async {
-    await _playing.close();
-    await _position.close();
-    await _duration.close();
-    await _errors.close();
+  Future<void> skipToPrevious() async {
+    if (currentIndex > 0) currentIndex--;
+    _media.add(_item(queue[currentIndex]));
+    _emit(AudioProcessingState.ready);
   }
+  @override Future<void> stop() async { playing = false; _emit(AudioProcessingState.idle); }
+  @override Future<void> setShuffleMode(AudioServiceShuffleMode value) async => shuffleMode = value;
+  @override Future<void> setRepeatMode(AudioServiceRepeatMode value) async => repeatMode = value;
 
-  void emitError(String message) => _errors.add(AudioEngineError(message));
+  void emitError(String message) => _playback.add(
+        PlaybackState(processingState: AudioProcessingState.error, errorMessage: message),
+      );
+
+  void _emit(AudioProcessingState state) => _playback.add(
+        PlaybackState(
+          processingState: state, playing: playing, updatePosition: position,
+          queueIndex: currentIndex,
+        ),
+      );
+
+  MediaItem _item(Song song) => MediaItem(id: song.id, title: song.title, duration: song.duration);
 }

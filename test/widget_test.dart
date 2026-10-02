@@ -1,13 +1,18 @@
+import 'dart:async';
+
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_audio_scan/local_audio_scan.dart';
 
 import 'package:auralis/main.dart';
+import 'package:auralis/models/song.dart';
+import 'package:auralis/services/audio_handler.dart';
 import 'package:auralis/services/music_scanner.dart';
 
 void main() {
   testWidgets('shows the Auralis home screen', (WidgetTester tester) async {
-    await tester.pumpWidget(const AuralisApp());
+    await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
     expect(find.text('Your sound,\nyour space.'), findsOneWidget);
     expect(find.text('Recently played'), findsOneWidget);
@@ -16,7 +21,7 @@ void main() {
   });
 
   testWidgets('navigates between the main sections', (WidgetTester tester) async {
-    await tester.pumpWidget(const AuralisApp());
+    await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
     await tester.tap(find.text('Playlists'));
     await tester.pump();
@@ -90,4 +95,35 @@ AudioTrack _track(String title, String path) {
     size: 1000,
     dateAdded: DateTime(2026),
   );
+}
+
+class FakePlaybackGateway implements PlaybackGateway {
+  final _playback = StreamController<PlaybackState>.broadcast();
+  final _media = StreamController<MediaItem?>.broadcast();
+  final _queue = StreamController<List<MediaItem>>.broadcast();
+
+  @override
+  Stream<PlaybackState> get playbackStateStream => _playback.stream;
+  @override
+  Stream<MediaItem?> get mediaItemStream => _media.stream;
+  @override
+  Stream<List<MediaItem>> get queueStream => _queue.stream;
+  @override
+  Future<void> setQueue(List<Song> songs, int initialIndex) async {}
+  @override
+  Future<void> play() async {}
+  @override
+  Future<void> pause() async {}
+  @override
+  Future<void> seek(Duration position) async {}
+  @override
+  Future<void> skipToNext() async {}
+  @override
+  Future<void> skipToPrevious() async {}
+  @override
+  Future<void> stop() async {}
+  @override
+  Future<void> setShuffleMode(AudioServiceShuffleMode mode) async {}
+  @override
+  Future<void> setRepeatMode(AudioServiceRepeatMode mode) async {}
 }

@@ -280,6 +280,14 @@ Puede buscar una posición dentro de la canción.
 
 # SPRINT 4 — Reproducción avanzada
 
+## Estado
+
+Completado técnicamente: el reproductor usa una cola temporal, shuffle, repeat,
+avance automático y `audio_service` para notificación multimedia y controles de
+segundo plano. Las pruebas automatizadas pasan y queda pendiente la comprobación
+manual en el teléfono de bloqueo de pantalla, controles externos y variaciones
+concretas del fabricante.
+
 ## Objetivo
 
 Convertir el reproductor básico en un reproductor funcional.
