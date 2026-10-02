@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'models/song.dart';
 import 'models/playlist.dart';
@@ -203,6 +204,7 @@ class _AuralisShellState extends State<AuralisShell> {
   late final SleepTimerController _sleepTimerController;
   List<Song> _availableSongs = const [];
   String _librarySearchQuery = '';
+  bool _playerOpen = false;
 
   static const _titles = ['Good evening', 'Library', 'Playlists', 'Settings'];
 
@@ -245,19 +247,33 @@ class _AuralisShellState extends State<AuralisShell> {
 
   void _openPlayer() {
     if (_playerController.currentSong == null) return;
+    if (_playerOpen) return;
+    _playerOpen = true;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PlayerScreen(
           controller: _playerController,
           favorites: _favoritesController,
           sleepTimer: _sleepTimerController,
+          availableSongs: _availableSongs,
         ),
       ),
-    );
+    ).whenComplete(() => _playerOpen = false);
   }
 
-  Future<void> _playSong(Song song, List<Song> songs) {
-    return _playerController.playSong(song, songs);
+  Future<void> _playSong(Song song, List<Song> songs) async {
+    await _requestNotificationPermission();
+    await _playerController.playSong(song, songs);
+    if (mounted && !_playerOpen) _openPlayer();
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    try {
+      final status = await Permission.notification.status;
+      if (!status.isGranted) await Permission.notification.request();
+    } catch (_) {
+      // Some non-Android targets do not expose notification permissions.
+    }
   }
 
   void _openLibrarySearch(String query) {
@@ -280,6 +296,30 @@ class _AuralisShellState extends State<AuralisShell> {
     );
   }
 
+  void _openPlaylist(Playlist playlist) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlaylistDetailScreen(
+          controller: _playlistsController,
+          playlistId: playlist.id,
+          availableSongs: _availableSongs,
+          onSongSelected: _playSong,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createPlaylist(BuildContext context) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => const PlaylistNameDialog(
+        initialName: '',
+        title: 'New playlist',
+      ),
+    );
+    if (name != null) await _playlistsController.createPlaylist(name);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -291,6 +331,9 @@ class _AuralisShellState extends State<AuralisShell> {
         onSongSelected: _playSong,
         onSearch: _openLibrarySearch,
         onSeeAll: _openHistory,
+        playlists: _playlistsController,
+        onCreatePlaylist: () => _createPlaylist(context),
+        onOpenPlaylist: _openPlaylist,
       ),
       LibraryScreen(
         favorites: _favoritesController,
@@ -305,6 +348,7 @@ class _AuralisShellState extends State<AuralisShell> {
       PlaylistsScreen(
         controller: _playlistsController,
         availableSongs: _availableSongs,
+        onSongSelected: _playSong,
       ),
       SettingsScreen(
         statistics: _statisticsController,
@@ -322,14 +366,6 @@ class _AuralisShellState extends State<AuralisShell> {
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
         backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            onPressed: () {},
-            tooltip: 'Notifications',
-            icon: const Icon(Icons.notifications_none_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
@@ -503,6 +539,9 @@ class HomeScreen extends StatelessWidget {
     this.onSongSelected,
     this.onSearch,
     this.onSeeAll,
+    this.playlists,
+    this.onCreatePlaylist,
+    this.onOpenPlaylist,
     super.key,
   });
 
@@ -513,6 +552,9 @@ class HomeScreen extends StatelessWidget {
   final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
   final ValueChanged<String>? onSearch;
   final VoidCallback? onSeeAll;
+  final PlaylistsController? playlists;
+  final VoidCallback? onCreatePlaylist;
+  final ValueChanged<Playlist>? onOpenPlaylist;
 
   @override
   Widget build(BuildContext context) {
@@ -548,34 +590,6 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        Text(
-          'Explore\nyour sound.',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                height: 1.05,
-              ),
-        ),
-        const SizedBox(height: 14),
-        AuralisCard(
-          padding: const EdgeInsets.fromLTRB(16, 16, 8, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Your highlights', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 142,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: 3,
-                  separatorBuilder: (_, _) => const SizedBox(width: 12),
-                  itemBuilder: (_, index) => _HighlightCard(song: mockSongs[index]),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
         _HomeHistorySection(
           history: history,
           favorites: favorites,
@@ -601,21 +615,13 @@ class HomeScreen extends StatelessWidget {
               ),
         ],
         const SizedBox(height: 24),
-        const SectionHeader(title: 'Made for you'),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 184,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: 3,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (_, index) => AlbumCard(
-              title: ['Afterglow', 'Open Skies', 'Refractions'][index],
-              subtitle: ['Luna Vale', 'Northbound', 'Mira Sol'][index],
-              color: mockSongs[index].color,
-            ),
+        if (playlists != null && onCreatePlaylist != null && onOpenPlaylist != null)
+          _HomePlaylistsSection(
+            controller: playlists!,
+            availableSongs: availableSongs,
+            onCreatePlaylist: onCreatePlaylist!,
+            onOpenPlaylist: onOpenPlaylist!,
           ),
-        ),
         ],
     );
   }
@@ -908,6 +914,74 @@ class _LibraryScreenState extends State<LibraryScreen> {
           onSongSelected: widget.onSongSelected,
         ),
       ),
+    );
+  }
+}
+
+class _HomePlaylistsSection extends StatelessWidget {
+  const _HomePlaylistsSection({
+    required this.controller,
+    required this.availableSongs,
+    required this.onCreatePlaylist,
+    required this.onOpenPlaylist,
+  });
+
+  final PlaylistsController controller;
+  final List<Song> availableSongs;
+  final VoidCallback onCreatePlaylist;
+  final ValueChanged<Playlist> onOpenPlaylist;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final playlists = controller.playlists;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              title: 'Your playlists',
+              actionLabel: 'Create',
+              onAction: onCreatePlaylist,
+            ),
+            const SizedBox(height: 10),
+            if (playlists.isEmpty)
+              AuralisCard(
+                child: ListTile(
+                  leading: const Icon(Icons.queue_music_rounded),
+                  title: const Text('Create your first playlist'),
+                  subtitle: const Text('Save songs for every mood.'),
+                  trailing: IconButton(
+                    onPressed: onCreatePlaylist,
+                    icon: const Icon(Icons.add_rounded),
+                  ),
+                ),
+              )
+            else
+              ...playlists.take(4).map((playlist) {
+                final songs = controller.songsFor(playlist, availableSongs);
+                return Card(
+                  child: ListTile(
+                    leading: songs.isEmpty
+                        ? const CircleAvatar(child: Icon(Icons.queue_music_rounded))
+                        : SongArtwork(song: songs.first, size: 52),
+                    title: Text(playlist.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text('${songs.length} available songs'),
+                    onTap: () => onOpenPlaylist(playlist),
+                    trailing: IconButton(
+                      tooltip: 'Play playlist',
+                      onPressed: songs.isEmpty
+                          ? null
+                          : () => controller.playPlaylist(playlist.id, availableSongs),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                    ),
+                  ),
+                );
+              }),
+          ],
+        );
+      },
     );
   }
 }
@@ -1306,11 +1380,13 @@ class PlaylistsScreen extends StatelessWidget {
   const PlaylistsScreen({
     required this.controller,
     required this.availableSongs,
+    this.onSongSelected,
     super.key,
   });
 
   final PlaylistsController controller;
   final List<Song> availableSongs;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1366,6 +1442,7 @@ class PlaylistsScreen extends StatelessWidget {
                           controller: controller,
                           playlistId: playlist.id,
                           availableSongs: availableSongs,
+                          onSongSelected: onSongSelected,
                         ),
                       ),
                     ),
@@ -1481,12 +1558,14 @@ class PlaylistDetailScreen extends StatefulWidget {
     required this.controller,
     required this.playlistId,
     required this.availableSongs,
+    this.onSongSelected,
     super.key,
   });
 
   final PlaylistsController controller;
   final String playlistId;
   final List<Song> availableSongs;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
 
   @override
   State<PlaylistDetailScreen> createState() => _PlaylistDetailScreenState();
@@ -1573,7 +1652,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                               icon: const Icon(Icons.remove_circle_outline_rounded),
                             )
                           : null,
-                      onTap: () => controller.playerController.playSong(song, songs),
+                      onTap: () => widget.onSongSelected == null
+                          ? controller.playerController.playSong(song, songs)
+                          : widget.onSongSelected!(song, songs),
                     );
                   },
                 ),
@@ -2059,12 +2140,14 @@ class PlayerScreen extends StatelessWidget {
     required this.controller,
     required this.favorites,
     required this.sleepTimer,
+    required this.availableSongs,
     super.key,
   });
 
   final PlayerController controller;
   final FavoritesController favorites;
   final SleepTimerController sleepTimer;
+  final List<Song> availableSongs;
 
   @override
   Widget build(BuildContext context) {
@@ -2106,10 +2189,13 @@ class PlayerScreen extends StatelessWidget {
               ),
             ],
           ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
-            child: Column(
-              children: [
+          body: Stack(
+            children: [
+              Positioned.fill(child: _PlayerBackdrop(song: song)),
+              SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
+                child: Column(
+                  children: [
                 Card(
                   margin: EdgeInsets.zero,
                   clipBehavior: Clip.antiAlias,
@@ -2133,6 +2219,15 @@ class PlayerScreen extends StatelessWidget {
                   child: Text(
                     song.artist,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    song.album,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
@@ -2222,10 +2317,44 @@ class PlayerScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 SleepTimerButton(controller: sleepTimer),
+                const SizedBox(height: 20),
+                Card(
+                  child: ExpansionTile(
+                    leading: const Icon(Icons.person_outline_rounded),
+                    title: const Text('Artist'),
+                    subtitle: Text(song.artist),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+                        child: Text(
+                          '${availableSongs.where((item) => item.artist.toLowerCase() == song.artist.toLowerCase()).length} songs in your library',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Card(
+                  child: ExpansionTile(
+                    leading: const Icon(Icons.lyrics_outlined),
+                    title: const Text('Lyrics'),
+                    subtitle: const Text('Lyrics unavailable'),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+                        child: Text(
+                          'Lyrics are not available for this local track yet.',
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        );
+        ],
+      ),
+    );
       },
     );
   }
@@ -2265,6 +2394,43 @@ class PlayerScreen extends StatelessWidget {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+}
+
+class _PlayerBackdrop extends StatelessWidget {
+  const _PlayerBackdrop({required this.song});
+
+  final Song song;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: Opacity(
+            opacity: 0.34,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SongArtwork(song: song, size: MediaQuery.sizeOf(context).height),
+            ),
+          ),
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.55),
+                Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.94),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -2517,54 +2683,6 @@ class AuralisCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: Padding(padding: padding, child: child),
-    );
-  }
-}
-
-class _HighlightCard extends StatelessWidget {
-  const _HighlightCard({required this.song});
-
-  final MockSong song;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 132,
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: AlbumArtwork(color: song.color, size: 132),
-          ),
-          Positioned(
-            left: 10,
-            right: 10,
-            bottom: 10,
-            child: Text(
-              song.album,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
-              ),
-            ),
-          ),
-          Positioned(
-            right: 8,
-            top: 8,
-            child: DecoratedBox(
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: IconButton(
-                iconSize: 18,
-                onPressed: null,
-                icon: Icon(Icons.play_arrow_rounded, color: Colors.black),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

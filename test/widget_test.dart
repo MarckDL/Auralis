@@ -20,7 +20,8 @@ void main() {
     await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
     expect(find.text('Music'), findsOneWidget);
-    expect(find.text('Explore\nyour sound.'), findsOneWidget);
+    expect(find.text('Your highlights'), findsNothing);
+    expect(find.text('Made for you'), findsNothing);
     expect(find.text('Recently played'), findsOneWidget);
     expect(find.text('Midnight Signals'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);

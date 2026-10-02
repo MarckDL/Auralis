@@ -759,8 +759,27 @@ historial, estadísticas y Sleep Timer. No se incorporaron fuentes externas ni
 librerías visuales adicionales.
 
 La pantalla Home sigue la referencia visual con cabecera, búsqueda tipo cápsula,
-hero de highlights y tarjetas de álbumes. El reproductor publica ticks de posición
+historial, canciones recientes y playlists reales. El reproductor publica ticks de posición
 desde `just_audio` para evitar que el contador quede congelado.
+
+---
+
+# SPRINT 14 — Now Playing, playlists reales y notificaciones
+
+## Estado
+
+Completado técnicamente: la selección de canciones abre Now Playing automáticamente,
+conservando la cola y evitando rutas duplicadas. El reproductor muestra portada nítida
+sobre un fondo desenfocado, información del artista y el estado `Lyrics unavailable`.
+
+Home dejó de mostrar highlights y recomendaciones mock. Sus playlists se cargan desde
+SQLite y permiten crear, abrir y reproducir una playlist real.
+
+La notificación multimedia de Android conserva título, artista, álbum, artwork y
+controles de reproducción. Se declara `POST_NOTIFICATIONS` y se solicita en tiempo de
+ejecución en Android 13+ mediante `permission_handler`. Las letras remotas,
+recomendaciones inteligentes y un centro interno de notificaciones siguen fuera de
+alcance.
 * Instalación.
 * Decisiones técnicas.
 

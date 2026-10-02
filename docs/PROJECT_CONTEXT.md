@@ -451,7 +451,7 @@ Este documento corresponde al contexto general de Auralis.
 
 El estado exacto del código debe comprobarse directamente en el repositorio antes de realizar cambios.
 
-Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 y 13. El reproductor
+Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 y 14. El reproductor
 usa `just_audio` en primer plano y `audio_service` para cola temporal, shuffle,
 repeat, avance automático, notificación multimedia y controles en segundo plano.
 Los favoritos y playlists se almacenan en SQLite desde Sprint 9, manteniendo sus
@@ -482,6 +482,12 @@ cápsula. Se mantiene el contraste y las áreas táctiles mínimas usando APIs n
 La posición de reproducción se sincroniza explícitamente con
 `AudioPlayer.positionStream` para actualizar el contador, la seekbar y las métricas
 de tiempo escuchado durante la reproducción.
+Sprint 14 abre Now Playing al seleccionar canciones desde cualquier colección,
+usa portada desenfocada como fondo, muestra artista y estado de letras no disponibles,
+y elimina los bloques mock de Home. Las playlists persistidas aparecen también en
+Home y pueden crearse, abrirse y reproducirse allí. Android declara y solicita
+`POST_NOTIFICATIONS` mediante `permission_handler` cuando corresponde; las letras
+remotas y un centro interno de notificaciones permanecen fuera de alcance.
 
 ---
 
