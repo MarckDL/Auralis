@@ -626,6 +626,13 @@ Detectar posibles canciones duplicadas utilizando criterios apropiados.
 
 # SPRINT 11 — UX + Performance
 
+## Estado
+
+Completado técnicamente: se corrigió la sincronización del tiempo escuchado y del
+progreso tras seek, se añadió Mini Player compartido en rutas secundarias, se
+conectaron búsqueda y `See all` desde Home, y se incorporaron transiciones nativas
+suaves. La optimización usa APIs de Flutter sin añadir librerías de animación.
+
 ## Objetivo
 
 Preparar Auralis para uso real.

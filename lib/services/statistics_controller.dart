@@ -10,6 +10,7 @@ class StatisticsController extends ChangeNotifier {
   final HistoryStore _repository;
   final List<HistoryEntry> _entries = <HistoryEntry>[];
   final Map<String, Duration> _lastPositions = <String, Duration>{};
+  Future<void> _pendingWrite = Future<void>.value();
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -63,7 +64,7 @@ class StatisticsController extends ChangeNotifier {
     }
     _lastPositions[song.id] = Duration.zero;
     notifyListeners();
-    await _save(_entries.lastWhere((entry) => entry.song.id == song.id));
+    await _queueSave(_entries.lastWhere((entry) => entry.song.id == song.id));
   }
 
   Future<void> recordPosition(Song song, Duration position, bool isPlaying) async {
@@ -78,7 +79,11 @@ class StatisticsController extends ChangeNotifier {
     final updated = entry.copyWith(listenedDuration: entry.listenedDuration + delta);
     _entries[index] = updated;
     notifyListeners();
-    await _save(updated);
+    await _queueSave(updated);
+  }
+
+  void resetPosition(Song song, Duration position) {
+    _lastPositions[song.id] = position;
   }
 
   Map<String, int> _countsBy(String Function(HistoryEntry entry) label) {
@@ -88,6 +93,11 @@ class StatisticsController extends ChangeNotifier {
       counts[key] = (counts[key] ?? 0) + entry.playCount;
     }
     return Map.unmodifiable(counts);
+  }
+
+  Future<void> _queueSave(HistoryEntry entry) {
+    _pendingWrite = _pendingWrite.then((_) => _save(entry));
+    return _pendingWrite;
   }
 
   Future<void> _save(HistoryEntry entry) async {

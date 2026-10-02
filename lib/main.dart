@@ -54,6 +54,7 @@ class AuralisApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF101018),
         navigationBarTheme: NavigationBarThemeData(
           backgroundColor: const Color(0xFF171722),
+          height: 72,
           indicatorColor: colorScheme.primary.withValues(alpha: 0.22),
           labelTextStyle: WidgetStatePropertyAll(
             TextStyle(color: colorScheme.onSurface),
@@ -66,6 +67,21 @@ class AuralisApp extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             borderSide: BorderSide.none,
           ),
+        ),
+        listTileTheme: const ListTileThemeData(
+          minVerticalPadding: 8,
+          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        ),
+        chipTheme: ChipThemeData(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          side: BorderSide.none,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         ),
       ),
       home: AuralisShell(playbackGateway: playbackGateway, database: database),
@@ -138,6 +154,7 @@ class _AuralisShellState extends State<AuralisShell> {
   late final StatisticsController _statisticsController;
   late final SleepTimerController _sleepTimerController;
   List<Song> _availableSongs = const [];
+  String _librarySearchQuery = '';
 
   static const _titles = ['Good evening', 'Library', 'Playlists', 'Settings'];
 
@@ -151,6 +168,7 @@ class _AuralisShellState extends State<AuralisShell> {
       gateway: widget.playbackGateway,
       onSongStarted: _statisticsController.recordSongStarted,
       onPositionChanged: _statisticsController.recordPosition,
+      onSeek: _statisticsController.resetPosition,
       onPlaybackCompleted: () async => _sleepTimerController.handleSongCompleted(),
     );
     _sleepTimerController = SleepTimerController(playerController: _playerController);
@@ -194,6 +212,21 @@ class _AuralisShellState extends State<AuralisShell> {
     return _playerController.playSong(song, songs);
   }
 
+  void _openLibrarySearch(String query) {
+    setState(() {
+      _librarySearchQuery = query;
+      _selectedIndex = 1;
+    });
+  }
+
+  void _openHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HistoryScreen(controller: _statisticsController),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -203,9 +236,12 @@ class _AuralisShellState extends State<AuralisShell> {
         availableSongs: _availableSongs,
         favorites: _favoritesController,
         onSongSelected: _playSong,
+        onSearch: _openLibrarySearch,
+        onSeeAll: _openHistory,
       ),
       LibraryScreen(
         favorites: _favoritesController,
+        initialSearchQuery: _librarySearchQuery,
         onSongsChanged: (songs) {
           if (mounted) setState(() => _availableSongs = songs);
           if (widget.database != null) unawaited(widget.database!.upsertSongs(songs));
@@ -222,7 +258,11 @@ class _AuralisShellState extends State<AuralisShell> {
       ),
     ];
 
-    return Scaffold(
+    return AuralisPlayerScope(
+      controller: _playerController,
+      favorites: _favoritesController,
+      onOpenPlayer: _openPlayer,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
         backgroundColor: Colors.transparent,
@@ -235,17 +275,33 @@ class _AuralisShellState extends State<AuralisShell> {
           const SizedBox(width: 8),
         ],
       ),
-      body: IndexedStack(index: _selectedIndex, children: pages),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.015, 0),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        ),
+        child: IndexedStack(
+          key: ValueKey(_selectedIndex),
+          index: _selectedIndex,
+          children: pages,
+        ),
+      ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListenableBuilder(
-            listenable: _playerController,
-        builder: (context, _) => MiniPlayer(
-              controller: _playerController,
-              favorites: _favoritesController,
-              onTap: _openPlayer,
-            ),
+          PlayerMiniBar(
+            controller: _playerController,
+            favorites: _favoritesController,
+            onTap: _openPlayer,
           ),
           NavigationBar(
             selectedIndex: _selectedIndex,
@@ -277,6 +333,84 @@ class _AuralisShellState extends State<AuralisShell> {
           ),
         ],
       ),
+      ),
+    );
+  }
+}
+
+class AuralisPlayerScope extends InheritedWidget {
+  const AuralisPlayerScope({
+    required this.controller,
+    required this.favorites,
+    required this.onOpenPlayer,
+    required super.child,
+    super.key,
+  });
+
+  final PlayerController controller;
+  final FavoritesController favorites;
+  final VoidCallback onOpenPlayer;
+
+  static AuralisPlayerScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<AuralisPlayerScope>();
+  }
+
+  @override
+  bool updateShouldNotify(AuralisPlayerScope oldWidget) =>
+      controller != oldWidget.controller || favorites != oldWidget.favorites;
+}
+
+class PlayerMiniBar extends StatelessWidget {
+  const PlayerMiniBar({
+    required this.controller,
+    required this.favorites,
+    required this.onTap,
+    super.key,
+  });
+
+  final PlayerController controller;
+  final FavoritesController favorites;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => MiniPlayer(
+        controller: controller,
+        favorites: favorites,
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class AuralisRouteScaffold extends StatelessWidget {
+  const AuralisRouteScaffold({
+    required this.body,
+    this.appBar,
+    this.floatingActionButton,
+    super.key,
+  });
+
+  final PreferredSizeWidget? appBar;
+  final Widget body;
+  final Widget? floatingActionButton;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = AuralisPlayerScope.maybeOf(context);
+    return Scaffold(
+      appBar: appBar,
+      body: body,
+      floatingActionButton: floatingActionButton,
+      bottomNavigationBar: scope == null
+          ? null
+          : PlayerMiniBar(
+              controller: scope.controller,
+              favorites: scope.favorites,
+              onTap: scope.onOpenPlayer,
+            ),
     );
   }
 }
@@ -288,6 +422,8 @@ class HomeScreen extends StatelessWidget {
     this.availableSongs = const [],
     this.favorites,
     this.onSongSelected,
+    this.onSearch,
+    this.onSeeAll,
     super.key,
   });
 
@@ -296,12 +432,12 @@ class HomeScreen extends StatelessWidget {
   final List<Song> availableSongs;
   final FavoritesController? favorites;
   final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
+  final ValueChanged<String>? onSearch;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: history,
-      builder: (context, _) => ListView(
+    return ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
         children: [
         Text(
@@ -313,31 +449,21 @@ class HomeScreen extends StatelessWidget {
         ),
         const SizedBox(height: 22),
         TextField(
+          onSubmitted: onSearch,
+          textInputAction: TextInputAction.search,
           decoration: const InputDecoration(
             hintText: 'Search your music',
             prefixIcon: Icon(Icons.search_rounded),
           ),
         ),
         const SizedBox(height: 28),
-        SectionHeader(
-          title: 'Recently played',
-          actionLabel: history.recentlyPlayed.isNotEmpty ? 'See all' : null,
+        _HomeHistorySection(
+          history: history,
+          favorites: favorites,
+          onSongSelected: onSongSelected,
+          onOpenPlayer: onOpenPlayer,
+          onSeeAll: onSeeAll,
         ),
-        const SizedBox(height: 12),
-        if (history.recentlyPlayed.isNotEmpty)
-          ...history.recentlyPlayed.take(3).map(
-                (entry) => RealSongCard(
-                  song: entry.song,
-                  favorites: favorites,
-                  onTap: onSongSelected == null
-                      ? null
-                      : () => onSongSelected!(entry.song, [entry.song]),
-                ),
-              )
-        else ...[
-          SongCard(song: mockSongs[0], onTap: onOpenPlayer),
-          SongCard(song: mockSongs[1], onTap: onOpenPlayer),
-        ],
         if (availableSongs.isNotEmpty) ...[
           const SizedBox(height: 24),
           const SectionHeader(title: 'Recently added'),
@@ -352,21 +478,6 @@ class HomeScreen extends StatelessWidget {
                   onTap: onSongSelected == null
                       ? null
                       : () => onSongSelected!(song, availableSongs),
-                ),
-              ),
-        ],
-        if (history.mostPlayed.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          const SectionHeader(title: 'Most played'),
-          const SizedBox(height: 12),
-          ...history.mostPlayed.take(3).map(
-                (entry) => ListTile(
-                  leading: SongArtwork(song: entry.song, size: 44),
-                  title: Text(entry.song.title),
-                  subtitle: Text('${entry.song.artist} · ${entry.playCount} plays'),
-                  onTap: onSongSelected == null
-                      ? null
-                      : () => onSongSelected!(entry.song, [entry.song]),
                 ),
               ),
         ],
@@ -387,7 +498,72 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         ],
-      ),
+    );
+  }
+}
+
+class _HomeHistorySection extends StatelessWidget {
+  const _HomeHistorySection({
+    required this.history,
+    required this.onOpenPlayer,
+    this.favorites,
+    this.onSongSelected,
+    this.onSeeAll,
+  });
+
+  final StatisticsController history;
+  final VoidCallback onOpenPlayer;
+  final FavoritesController? favorites;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
+  final VoidCallback? onSeeAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: history,
+      builder: (context, _) {
+        final recent = history.recentlyPlayed.take(3).toList(growable: false);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              title: 'Recently played',
+              actionLabel: recent.isNotEmpty ? 'See all' : null,
+              onAction: onSeeAll,
+            ),
+            const SizedBox(height: 12),
+            if (recent.isNotEmpty)
+              ...recent.map(
+                (entry) => RealSongCard(
+                  song: entry.song,
+                  favorites: favorites,
+                  onTap: onSongSelected == null
+                      ? null
+                      : () => onSongSelected!(entry.song, [entry.song]),
+                ),
+              )
+            else ...[
+              SongCard(song: mockSongs[0], onTap: onOpenPlayer),
+              SongCard(song: mockSongs[1], onTap: onOpenPlayer),
+            ],
+            if (history.mostPlayed.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const SectionHeader(title: 'Most played'),
+              const SizedBox(height: 12),
+              ...history.mostPlayed.take(3).map(
+                    (entry) => ListTile(
+                      leading: SongArtwork(song: entry.song, size: 44),
+                      title: Text(entry.song.title),
+                      subtitle: Text('${entry.song.artist} · ${entry.playCount} plays'),
+                      onTap: onSongSelected == null
+                          ? null
+                          : () => onSongSelected!(entry.song, [entry.song]),
+                    ),
+                  ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -398,6 +574,7 @@ class LibraryScreen extends StatefulWidget {
     this.favorites,
     this.onSongsChanged,
     this.onSongSelected,
+    this.initialSearchQuery = '',
     super.key,
   });
 
@@ -405,6 +582,7 @@ class LibraryScreen extends StatefulWidget {
   final FavoritesController? favorites;
   final ValueChanged<List<Song>>? onSongsChanged;
   final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
+  final String initialSearchQuery;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -422,7 +600,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _scanner = widget.scanner ?? MusicScanner();
+    _searchQuery = widget.initialSearchQuery.trim();
+    _searchController.text = _searchQuery;
     _loadLibrary();
+  }
+
+  @override
+  void didUpdateWidget(covariant LibraryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSearchQuery != widget.initialSearchQuery &&
+        widget.initialSearchQuery != _searchQuery) {
+      _searchQuery = widget.initialSearchQuery.trim();
+      _searchController.value = TextEditingValue(
+        text: _searchQuery,
+        selection: TextSelection.collapsed(offset: _searchQuery.length),
+      );
+    }
   }
 
   Future<void> _loadLibrary() async {
@@ -747,7 +940,7 @@ class ArtistDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final artistSongs = MusicCatalog(songs).songsForArtist(artist);
     final albums = MusicCatalog(artistSongs).albums;
-    return Scaffold(
+    return AuralisRouteScaffold(
       appBar: AppBar(title: Text(artist)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -816,7 +1009,7 @@ class AlbumDetailScreen extends StatelessWidget {
             songs: [],
           ),
         );
-    return Scaffold(
+    return AuralisRouteScaffold(
       appBar: AppBar(title: Text(album.name)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -867,7 +1060,7 @@ class GenreDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final genreSongs = MusicCatalog(songs).songsForGenre(genre);
-    return Scaffold(
+    return AuralisRouteScaffold(
       appBar: AppBar(title: Text(genre)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -1096,11 +1289,11 @@ class PlaylistDetailScreen extends StatelessWidget {
       builder: (context, _) {
         final playlist = controller.findById(playlistId);
         if (playlist == null) {
-          return const Scaffold(body: Center(child: Text('Playlist not found')));
+          return const AuralisRouteScaffold(body: Center(child: Text('Playlist not found')));
         }
         final songs = controller.songsFor(playlist, availableSongs);
         final missingCount = playlist.songIds.length - songs.length;
-        return Scaffold(
+        return AuralisRouteScaffold(
           appBar: AppBar(title: Text(playlist.name)),
           body: Column(
             children: [
@@ -1248,7 +1441,7 @@ class FavoritesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AuralisRouteScaffold(
       appBar: AppBar(title: const Text('Favorites')),
       body: ListenableBuilder(
         listenable: favorites,
@@ -1359,7 +1552,7 @@ class StatisticsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AuralisRouteScaffold(
       appBar: AppBar(title: const Text('Statistics')),
       body: ListenableBuilder(
         listenable: controller,
@@ -1415,6 +1608,48 @@ class StatisticsScreen extends StatelessWidget {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
             ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class HistoryScreen extends StatelessWidget {
+  const HistoryScreen({required this.controller, super.key});
+
+  final StatisticsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AuralisRouteScaffold(
+      appBar: AppBar(title: const Text('Recently played')),
+      body: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final entries = controller.recentlyPlayed;
+          if (entries.isEmpty) {
+            return const EmptyState(
+              icon: Icons.history_rounded,
+              title: 'No listening history',
+              message: 'Songs you play will appear here.',
+              actionLabel: 'Back',
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            itemCount: entries.length,
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              final scope = AuralisPlayerScope.maybeOf(context);
+              return RealSongCard(
+                song: entry.song,
+                favorites: scope?.favorites,
+                onTap: scope == null
+                    ? null
+                    : () => scope.controller.playSong(entry.song, [entry.song]),
+              );
+            },
           );
         },
       ),
@@ -1750,20 +1985,22 @@ class RealSongCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-      leading: SongArtwork(song: song, size: 52),
-      title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text('${song.artist} · ${song.album}'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (favorites != null)
-            FavoriteButton(song: song, favorites: favorites!),
-          Text(song.durationLabel),
-        ],
+    return RepaintBoundary(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+        leading: SongArtwork(song: song, size: 52),
+        title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text('${song.artist} · ${song.album}'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (favorites != null)
+              FavoriteButton(song: song, favorites: favorites!),
+            Text(song.durationLabel),
+          ],
+        ),
+        onTap: onTap,
       ),
-      onTap: onTap,
     );
   }
 }
@@ -1932,10 +2169,11 @@ class MiniPlayer extends StatelessWidget {
 }
 
 class SectionHeader extends StatelessWidget {
-  const SectionHeader({required this.title, this.actionLabel, super.key});
+  const SectionHeader({required this.title, this.actionLabel, this.onAction, super.key});
 
   final String title;
   final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1944,7 +2182,7 @@ class SectionHeader extends StatelessWidget {
       children: [
         Text(title, style: Theme.of(context).textTheme.titleLarge),
         if (actionLabel != null)
-          TextButton(onPressed: () {}, child: Text(actionLabel!)),
+          TextButton(onPressed: onAction, child: Text(actionLabel!)),
       ],
     );
   }

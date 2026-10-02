@@ -4,8 +4,8 @@ Auralis es una aplicación Android de música local desarrollada con Flutter y D
 
 ## Estado actual
 
-Sprint 10: biblioteca local conectada a un reproductor avanzado, historial y
-estadísticas persistentes mediante SQLite, y Sleep Timer.
+Sprint 11: biblioteca local conectada a un reproductor avanzado, historial y
+estadísticas persistentes mediante SQLite, Sleep Timer y una UX optimizada.
 
 La cola no se persiste. Favoritos, playlists e historial se guardan localmente en
 SQLite; la base de datos no se sincroniza con ningún servidor.
@@ -44,16 +44,18 @@ flutter test
 En Android, el reproductor también expone una notificación multimedia y controles
 del sistema mientras la reproducción está activa.
 
-El progreso visual del reproductor tiene una mejora pendiente: después de un seek,
-la reproducción cambia correctamente, pero el contador puede dejar de actualizarse
-continuamente hasta una futura revisión de sincronización de UI.
-
-La búsqueda del Home y el botón `See all` de Recently played siguen siendo controles
-visuales pendientes de una futura revisión de UX.
+El progreso visual del reproductor se mantiene sincronizado después de un seek y la
+búsqueda del Home y el botón `See all` de Recently played ya son funcionales.
 
 El Sleep Timer permite detener la reproducción por tiempo o al finalizar la canción.
 Las estadísticas registran reproducciones, tiempo escuchado, artistas y géneros más
 reproducidos. Smart Playlists, Rating, letras, ecualizador, crossfade y gapless
 playback permanecen fuera de alcance.
+
+Sprint 11 mejora la sincronización del progreso y del tiempo escuchado, muestra el
+Mini Player en rutas secundarias, conecta la búsqueda y `See all` de Home, y añade
+transiciones nativas suaves. La optimización usa widgets const, listas eficientes,
+`RepaintBoundary` y escritura serializada de estadísticas; no se añadió una librería
+de animaciones.
 
 La documentación general del proyecto se encuentra en [`docs/`](docs/).

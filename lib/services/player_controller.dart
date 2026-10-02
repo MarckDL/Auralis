@@ -13,6 +13,7 @@ class PlayerController extends ChangeNotifier {
     required this._gateway,
     this.onSongStarted,
     this.onPositionChanged,
+    this.onSeek,
     this.onPlaybackCompleted,
   }) {
     _subscriptions = [
@@ -28,6 +29,7 @@ class PlayerController extends ChangeNotifier {
   final PlaybackGateway _gateway;
   final Future<void> Function(Song song)? onSongStarted;
   final Future<void> Function(Song song, Duration position, bool isPlaying)? onPositionChanged;
+  final void Function(Song song, Duration position)? onSeek;
   final Future<void> Function()? onPlaybackCompleted;
   late final List<StreamSubscription<Object?>> _subscriptions;
   List<Song> _songs = const [];
@@ -92,6 +94,11 @@ class PlayerController extends ChangeNotifier {
   Future<void> stop() async {
     try {
       await _gateway.stop();
+      _position = Duration.zero;
+      if (_currentSong != null) {
+        onSeek?.call(_currentSong!, Duration.zero);
+      }
+      notifyListeners();
     } catch (error) {
       _setError(_readableError(error));
     }
@@ -108,6 +115,9 @@ class PlayerController extends ChangeNotifier {
     try {
       await _gateway.seek(safePosition);
       _position = safePosition;
+      if (_currentSong != null) {
+        onSeek?.call(_currentSong!, safePosition);
+      }
       notifyListeners();
     } catch (error) {
       _setError(_readableError(error));

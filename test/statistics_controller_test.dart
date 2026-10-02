@@ -28,6 +28,16 @@ void main() {
     expect(statistics.listeningTime, const Duration(seconds: 3));
   });
 
+  test('resets the position baseline after seek', () async {
+    final statistics = StatisticsController(repository: MemoryHistoryStore());
+    await statistics.recordSongStarted(songA);
+    await statistics.recordPosition(songA, const Duration(seconds: 4), true);
+    statistics.resetPosition(songA, const Duration(minutes: 2));
+    await statistics.recordPosition(songA, const Duration(minutes: 2, seconds: 1), true);
+
+    expect(statistics.listeningTime, const Duration(seconds: 5));
+  });
+
   test('loads persisted statistics', () async {
     final store = MemoryHistoryStore();
     final first = StatisticsController(repository: store);

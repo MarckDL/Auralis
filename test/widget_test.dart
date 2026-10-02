@@ -12,6 +12,7 @@ import 'package:auralis/services/favorites_controller.dart';
 import 'package:auralis/services/favorites_repository.dart';
 import 'package:auralis/services/history_controller.dart';
 import 'package:auralis/services/music_scanner.dart';
+import 'package:auralis/services/player_controller.dart';
 import 'package:auralis/services/statistics_controller.dart';
 
 void main() {
@@ -102,6 +103,62 @@ void main() {
     expect(find.text('Top artists'), findsOneWidget);
     expect(find.text('Artist'), findsWidgets);
     statistics.dispose();
+  });
+
+  testWidgets('Home forwards search and See all actions', (WidgetTester tester) async {
+    final statistics = StatisticsController(repository: MemoryHistoryStore());
+    await statistics.recordSongStarted(_catalogSong('history', 'Artist', 'Album'));
+    String? searchQuery;
+    var openedHistory = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onOpenPlayer: () {},
+            history: statistics,
+            onSearch: (value) => searchQuery = value,
+            onSeeAll: () => openedHistory = true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'luna');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    await tester.tap(find.text('See all'));
+
+    expect(searchQuery, 'luna');
+    expect(openedHistory, isTrue);
+    statistics.dispose();
+  });
+
+  testWidgets('route scaffold shows the global Mini Player', (WidgetTester tester) async {
+    final gateway = FakePlaybackGateway();
+    final player = PlayerController(gateway: gateway);
+    final favorites = FavoritesController(repository: _MemoryFavoritesRepository());
+    await player.playSong(_catalogSong('playing', 'Artist', 'Album'), [
+      _catalogSong('playing', 'Artist', 'Album'),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuralisPlayerScope(
+          controller: player,
+          favorites: favorites,
+          onOpenPlayer: () {},
+          child: const AuralisRouteScaffold(
+            body: Center(child: Text('Detail')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Song playing'), findsOneWidget);
+    player.dispose();
+    favorites.dispose();
   });
 
   testWidgets('shows a permission state when access is denied',
