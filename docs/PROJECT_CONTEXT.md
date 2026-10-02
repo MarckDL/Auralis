@@ -451,7 +451,7 @@ Este documento corresponde al contexto general de Auralis.
 
 El estado exacto del código debe comprobarse directamente en el repositorio antes de realizar cambios.
 
-Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6 y 7. El reproductor
+Actualmente Auralis tiene completados los Sprints 0, 1, 2, 3, 4, 5, 6, 7 y 8. El reproductor
 usa `just_audio` en primer plano y `audio_service` para cola temporal, shuffle,
 repeat, avance automático, notificación multimedia y controles en segundo plano.
 Los favoritos se guardan como IDs en un archivo JSON privado; la base de datos
@@ -459,6 +459,10 @@ queda reservada para Sprint 9. Las playlists también se guardan como JSON y
 almacenan IDs de canciones para conservar su orden. Artists, albums y genres se
 derivan en memoria desde la lista actual de `Song`; `local_audio_scan 2.0.0` no
 expone género y se usa `Unknown genre` como fallback.
+La búsqueda actual se realiza sobre la biblioteca escaneada y permite filtrar por
+título, artista y álbum. El historial de reproducción es temporal, vive en memoria,
+evita duplicados consecutivos y calcula Recently Played, Recently Added y Most Played;
+su persistencia queda reservada para Sprint 9.
 
 ---
 

@@ -48,6 +48,46 @@ void main() {
     expect(find.text('Song A'), findsOneWidget);
   });
 
+  testWidgets('filters the scanned library by title', (WidgetTester tester) async {
+    final scanner = MusicScanner(
+      gateway: FakeAudioScannerGateway(
+        tracks: [
+          _track('Song A', 'a.mp3'),
+          _track('Different Song', 'b.mp3'),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'song a');
+    await tester.pump();
+
+    expect(find.text('1 songs'), findsOneWidget);
+    expect(find.text('Song A'), findsOneWidget);
+    expect(find.text('Different Song'), findsNothing);
+  });
+
+  testWidgets('shows an empty state when search has no matches', (WidgetTester tester) async {
+    final scanner = MusicScanner(
+      gateway: FakeAudioScannerGateway(tracks: [_track('Song A', 'a.mp3')]),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'missing');
+    await tester.pump();
+
+    expect(find.text('No matches found'), findsOneWidget);
+    expect(find.text('Clear search'), findsOneWidget);
+  });
+
   testWidgets('shows a permission state when access is denied',
       (WidgetTester tester) async {
     final scanner = MusicScanner(

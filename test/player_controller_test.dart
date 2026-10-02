@@ -29,6 +29,19 @@ void main() {
     expect(controller.isPlaying, isTrue);
   });
 
+  test('notifies the history callback after playback starts', () async {
+    Song? started;
+    final historyController = PlayerController(
+      gateway: gateway,
+      onSongStarted: (song) async => started = song,
+    );
+    addTearDown(historyController.dispose);
+
+    await historyController.playSong(songA, [songA, songB]);
+
+    expect(started, songA);
+  });
+
   test('pauses, resumes and seeks', () async {
     await controller.playSong(songA, [songA, songB]);
     await controller.pause();

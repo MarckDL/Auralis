@@ -4,11 +4,12 @@ Auralis es una aplicación Android de música local desarrollada con Flutter y D
 
 ## Estado actual
 
-Sprint 7: biblioteca local conectada a un reproductor avanzado, favoritos,
-playlists persistentes y navegación por artistas, álbumes y géneros.
+Sprint 8: biblioteca local conectada a un reproductor avanzado, búsqueda,
+historial temporal, favoritos, playlists persistentes y navegación por artistas,
+álbumes y géneros.
 
-La cola no se persiste. Favoritos y playlists sobreviven al cierre de la aplicación;
-historial, base de datos y ecualizador pertenecen a sprints posteriores.
+La cola y el historial no se persisten. Favoritos y playlists sobreviven al cierre
+de la aplicación; la base de datos y el ecualizador pertenecen a sprints posteriores.
 
 Las playlists actuales usan persistencia JSON provisional. La base de datos SQLite
 se reservará para Sprint 9.

@@ -24,6 +24,7 @@ void main() {
     expect(song.artist, 'Unknown artist');
     expect(song.album, 'Unknown album');
     expect(song.format, 'flac');
+    expect(song.dateAdded, DateTime(2026));
     expect(song.durationLabel, '1:05');
   });
 

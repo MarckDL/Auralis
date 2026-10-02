@@ -13,6 +13,7 @@ class Song {
     required this.format,
     required this.mimeType,
     this.genre = 'Unknown genre',
+    this.dateAdded,
     this.artwork,
   });
 
@@ -29,6 +30,7 @@ class Song {
       format: _extension(track.filePath),
       mimeType: track.mimeType,
       genre: 'Unknown genre',
+      dateAdded: track.dateAdded,
       artwork: track.artwork,
     );
   }
@@ -59,6 +61,7 @@ class Song {
   final String format;
   final String mimeType;
   final String genre;
+  final DateTime? dateAdded;
   final Uint8List? artwork;
 
   bool get hasArtwork => artwork != null && artwork!.isNotEmpty;

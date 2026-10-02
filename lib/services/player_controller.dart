@@ -9,7 +9,7 @@ import 'audio_handler.dart';
 enum PlayerStatus { idle, loading, ready, error }
 
 class PlayerController extends ChangeNotifier {
-  PlayerController({required this._gateway}) {
+  PlayerController({required this._gateway, this.onSongStarted}) {
     _subscriptions = [
       _gateway.playbackStateStream.listen(_onPlaybackState),
       _gateway.mediaItemStream.listen(_onMediaItem),
@@ -21,6 +21,7 @@ class PlayerController extends ChangeNotifier {
   }
 
   final PlaybackGateway _gateway;
+  final Future<void> Function(Song song)? onSongStarted;
   late final List<StreamSubscription<Object?>> _subscriptions;
   List<Song> _songs = const [];
   int _currentIndex = -1;
@@ -58,6 +59,7 @@ class PlayerController extends ChangeNotifier {
     try {
       await _gateway.setQueue(_songs, _currentIndex);
       await _gateway.play();
+      await onSongStarted?.call(song);
     } catch (error) {
       _setError(_readableError(error));
     }

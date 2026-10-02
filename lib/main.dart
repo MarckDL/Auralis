@@ -11,6 +11,7 @@ import 'services/player_controller.dart';
 import 'services/music_scanner.dart';
 import 'services/music_catalog.dart';
 import 'services/playlists_controller.dart';
+import 'services/history_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -128,6 +129,7 @@ class _AuralisShellState extends State<AuralisShell> {
   late final PlayerController _playerController;
   late final FavoritesController _favoritesController;
   late final PlaylistsController _playlistsController;
+  late final HistoryController _historyController;
   List<Song> _availableSongs = const [];
 
   static const _titles = ['Good evening', 'Library', 'Playlists', 'Settings'];
@@ -135,7 +137,11 @@ class _AuralisShellState extends State<AuralisShell> {
   @override
   void initState() {
     super.initState();
-    _playerController = PlayerController(gateway: widget.playbackGateway);
+    _historyController = HistoryController();
+    _playerController = PlayerController(
+      gateway: widget.playbackGateway,
+      onSongStarted: (song) async => _historyController.record(song),
+    );
     _favoritesController = FavoritesController();
     _playlistsController = PlaylistsController(
       playerController: _playerController,
@@ -147,6 +153,7 @@ class _AuralisShellState extends State<AuralisShell> {
   @override
   void dispose() {
     _playerController.dispose();
+    _historyController.dispose();
     _favoritesController.dispose();
     _playlistsController.dispose();
     super.dispose();
@@ -171,7 +178,13 @@ class _AuralisShellState extends State<AuralisShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomeScreen(onOpenPlayer: _openPlayer),
+      HomeScreen(
+        onOpenPlayer: _openPlayer,
+        history: _historyController,
+        availableSongs: _availableSongs,
+        favorites: _favoritesController,
+        onSongSelected: _playSong,
+      ),
       LibraryScreen(
         favorites: _favoritesController,
         onSongsChanged: (songs) {
@@ -246,15 +259,28 @@ class _AuralisShellState extends State<AuralisShell> {
 }
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({required this.onOpenPlayer, super.key});
+  const HomeScreen({
+    required this.onOpenPlayer,
+    required this.history,
+    this.availableSongs = const [],
+    this.favorites,
+    this.onSongSelected,
+    super.key,
+  });
 
   final VoidCallback onOpenPlayer;
+  final HistoryController history;
+  final List<Song> availableSongs;
+  final FavoritesController? favorites;
+  final Future<void> Function(Song song, List<Song> songs)? onSongSelected;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-      children: [
+    return ListenableBuilder(
+      listenable: history,
+      builder: (context, _) => ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        children: [
         Text(
           'Your sound,\nyour space.',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -270,10 +296,57 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 28),
-        const SectionHeader(title: 'Recently played', actionLabel: 'See all'),
+        SectionHeader(
+          title: 'Recently played',
+          actionLabel: history.recentlyPlayed.isNotEmpty ? 'See all' : null,
+        ),
         const SizedBox(height: 12),
-        SongCard(song: mockSongs[0], onTap: onOpenPlayer),
-        SongCard(song: mockSongs[1], onTap: onOpenPlayer),
+        if (history.recentlyPlayed.isNotEmpty)
+          ...history.recentlyPlayed.take(3).map(
+                (entry) => RealSongCard(
+                  song: entry.song,
+                  favorites: favorites,
+                  onTap: onSongSelected == null
+                      ? null
+                      : () => onSongSelected!(entry.song, [entry.song]),
+                ),
+              )
+        else ...[
+          SongCard(song: mockSongs[0], onTap: onOpenPlayer),
+          SongCard(song: mockSongs[1], onTap: onOpenPlayer),
+        ],
+        if (availableSongs.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          const SectionHeader(title: 'Recently added'),
+          const SizedBox(height: 12),
+          ...([...availableSongs]
+                ..sort((a, b) => (b.dateAdded ?? DateTime(0)).compareTo(a.dateAdded ?? DateTime(0))))
+              .take(3)
+              .map(
+                (song) => RealSongCard(
+                  song: song,
+                  favorites: favorites,
+                  onTap: onSongSelected == null
+                      ? null
+                      : () => onSongSelected!(song, availableSongs),
+                ),
+              ),
+        ],
+        if (history.mostPlayed.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          const SectionHeader(title: 'Most played'),
+          const SizedBox(height: 12),
+          ...history.mostPlayed.take(3).map(
+                (entry) => ListTile(
+                  leading: SongArtwork(song: entry.song, size: 44),
+                  title: Text(entry.song.title),
+                  subtitle: Text('${entry.song.artist} · ${entry.playCount} plays'),
+                  onTap: onSongSelected == null
+                      ? null
+                      : () => onSongSelected!(entry.song, [entry.song]),
+                ),
+              ),
+        ],
         const SizedBox(height: 24),
         const SectionHeader(title: 'Made for you'),
         const SizedBox(height: 12),
@@ -290,7 +363,8 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -318,6 +392,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   MusicScanResult? _result;
   bool _isLoading = true;
   String _selectedCategory = 'Songs';
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -340,6 +416,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
@@ -356,10 +438,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
           ],
         ),
-        const TextField(
+        TextField(
+          controller: _searchController,
+          onChanged: (value) => setState(() => _searchQuery = value.trim()),
           decoration: InputDecoration(
             hintText: 'Search songs, artists or albums',
             prefixIcon: Icon(Icons.search_rounded),
+            suffixIcon: _searchQuery.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear search',
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                    icon: const Icon(Icons.clear_rounded),
+                  ),
           ),
         ),
         const SizedBox(height: 24),
@@ -386,10 +480,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget _buildResult(BuildContext context, MusicScanResult result) {
     switch (result.status) {
       case MusicScanStatus.success:
+        final filteredSongs = _filterSongs(result.songs);
+        if (filteredSongs.isEmpty && _searchQuery.isNotEmpty) {
+          return EmptyState(
+            icon: Icons.search_off_rounded,
+            title: 'No matches found',
+            message: 'Try another title, artist or album.',
+            actionLabel: 'Clear search',
+            onAction: () {
+              _searchController.clear();
+              setState(() => _searchQuery = '');
+            },
+          );
+        }
         if (_selectedCategory != 'Songs') {
           return CategoryBrowseView(
             category: _selectedCategory,
-            songs: result.songs,
+            songs: filteredSongs,
             favorites: widget.favorites,
             onSongSelected: widget.onSongSelected,
           );
@@ -398,17 +505,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${result.songs.length} songs',
+              '${filteredSongs.length} songs',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            ...result.songs.map(
+            ...filteredSongs.map(
               (song) => RealSongCard(
                 song: song,
                 favorites: widget.favorites,
                 onTap: widget.onSongSelected == null
                     ? null
-                    : () => widget.onSongSelected!(song, result.songs),
+                    : () => widget.onSongSelected!(song, filteredSongs),
               ),
             ),
           ],
@@ -438,6 +545,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
           onAction: _loadLibrary,
         );
     }
+  }
+
+  List<Song> _filterSongs(List<Song> songs) {
+    final query = _searchQuery.toLowerCase();
+    if (query.isEmpty) return songs;
+    return songs.where((song) {
+      return song.title.toLowerCase().contains(query) ||
+          song.artist.toLowerCase().contains(query) ||
+          song.album.toLowerCase().contains(query);
+    }).toList(growable: false);
   }
 
   void _openFavorites(BuildContext context) {

@@ -442,6 +442,13 @@ La biblioteca puede explorarse por diferentes categorías.
 
 # SPRINT 8 — Search + History
 
+## Estado
+
+Completado técnicamente: Library permite buscar por título, artista y álbum,
+respetando la categoría activa. El historial temporal registra reproducciones
+exitosas y alimenta Recently Played, Recently Added y Most Played. La persistencia
+del historial queda reservada para Sprint 9.
+
 ## Objetivo
 
 Encontrar música rápidamente y registrar actividad.
