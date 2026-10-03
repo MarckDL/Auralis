@@ -561,6 +561,14 @@ class HomeScreen extends StatelessWidget {
     return ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
       children: [
+        Text(
+          _greeting(),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: 2),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -625,6 +633,13 @@ class HomeScreen extends StatelessWidget {
         ],
     );
   }
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
 }
 
 class _HomeHistorySection extends StatelessWidget {
@@ -667,10 +682,18 @@ class _HomeHistorySection extends StatelessWidget {
                       : () => onSongSelected!(entry.song, [entry.song]),
                 ),
               )
-            else ...[
-              SongCard(song: mockSongs[0], onTap: onOpenPlayer),
-              SongCard(song: mockSongs[1], onTap: onOpenPlayer),
-            ],
+            else
+              AuralisCard(
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.history_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: const Text('No recent plays'),
+                  subtitle: const Text('Start listening to build your history.'),
+                ),
+              ),
             if (history.mostPlayed.isNotEmpty) ...[
               const SizedBox(height: 24),
               const SectionHeader(title: 'Most played'),
@@ -691,6 +714,7 @@ class _HomeHistorySection extends StatelessWidget {
       },
     );
   }
+
 }
 
 class LibraryScreen extends StatefulWidget {
@@ -2169,9 +2193,12 @@ class PlayerScreen extends StatelessWidget {
             : controller.position;
 
         return Scaffold(
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: const Text('Now playing'),
             centerTitle: true,
+            backgroundColor: Colors.transparent,
+            foregroundColor: Colors.white,
             actions: [
               ListenableBuilder(
                 listenable: favorites,
@@ -2211,6 +2238,7 @@ class PlayerScreen extends StatelessWidget {
                     song.title,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
+                          color: Colors.white,
                         ),
                   ),
                 ),
@@ -2219,7 +2247,7 @@ class PlayerScreen extends StatelessWidget {
                   child: Text(
                     song.artist,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          color: Colors.white.withValues(alpha: 0.82),
                         ),
                   ),
                 ),
@@ -2228,7 +2256,7 @@ class PlayerScreen extends StatelessWidget {
                   child: Text(
                     song.album,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          color: Colors.white.withValues(alpha: 0.68),
                         ),
                   ),
                 ),
@@ -2241,7 +2269,13 @@ class PlayerScreen extends StatelessWidget {
                       style: TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                   ),
-                Slider(
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: Colors.white,
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.28),
+                    thumbColor: Colors.white,
+                  ),
+                  child: Slider(
                   value: position.inMilliseconds.toDouble(),
                   max: maxDuration.inMilliseconds.toDouble(),
                   onChanged: controller.status == PlayerStatus.loading
@@ -2249,12 +2283,13 @@ class PlayerScreen extends StatelessWidget {
                       : (value) => controller.seek(
                             Duration(milliseconds: value.round()),
                           ),
+                  ),
                 ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(_formatDuration(controller.position)),
-                    Text(_formatDuration(controller.duration)),
+                    Text(_formatDuration(controller.position), style: const TextStyle(color: Colors.white70)),
+                    Text(_formatDuration(controller.duration), style: const TextStyle(color: Colors.white70)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -2319,10 +2354,14 @@ class PlayerScreen extends StatelessWidget {
                 SleepTimerButton(controller: sleepTimer),
                 const SizedBox(height: 20),
                 Card(
+                  color: Colors.black.withValues(alpha: 0.30),
+                  shadowColor: Colors.black.withValues(alpha: 0.20),
                   child: ExpansionTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
                     leading: const Icon(Icons.person_outline_rounded),
                     title: const Text('Artist'),
-                    subtitle: Text(song.artist),
+                    subtitle: Text(song.artist, style: const TextStyle(color: Colors.white70)),
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
@@ -2334,16 +2373,20 @@ class PlayerScreen extends StatelessWidget {
                   ),
                 ),
                 Card(
+                  color: Colors.black.withValues(alpha: 0.30),
+                  shadowColor: Colors.black.withValues(alpha: 0.20),
                   child: ExpansionTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
                     leading: const Icon(Icons.lyrics_outlined),
                     title: const Text('Lyrics'),
-                    subtitle: const Text('Lyrics unavailable'),
+                    subtitle: const Text('Lyrics unavailable', style: TextStyle(color: Colors.white70)),
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
                         child: Text(
                           'Lyrics are not available for this local track yet.',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          style: const TextStyle(color: Colors.white70),
                         ),
                       ),
                     ],
@@ -2408,9 +2451,9 @@ class _PlayerBackdrop extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         ImageFiltered(
-          imageFilter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          imageFilter: ui.ImageFilter.blur(sigmaX: 34, sigmaY: 34),
           child: Opacity(
-            opacity: 0.34,
+            opacity: 0.78,
             child: FittedBox(
               fit: BoxFit.cover,
               child: SongArtwork(song: song, size: MediaQuery.sizeOf(context).height),
@@ -2423,8 +2466,9 @@ class _PlayerBackdrop extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.55),
-                Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.94),
+                Colors.black.withValues(alpha: 0.24),
+                Colors.black.withValues(alpha: 0.68),
+                Colors.black.withValues(alpha: 0.92),
               ],
             ),
           ),

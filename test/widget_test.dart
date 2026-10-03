@@ -23,7 +23,6 @@ void main() {
     expect(find.text('Your highlights'), findsNothing);
     expect(find.text('Made for you'), findsNothing);
     expect(find.text('Recently played'), findsOneWidget);
-    expect(find.text('Midnight Signals'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
