@@ -796,7 +796,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Your library', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Your library',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
             if (widget.favorites != null)
               TextButton.icon(
                 onPressed: () => _openFavorites(context),
@@ -824,19 +829,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ),
           ),
         ),
-        const SizedBox(height: 24),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: ['Songs', 'Artists', 'Albums', 'Genres']
-              .map((label) => FilterChip(
-                    label: Text(label),
-                    selected: label == _selectedCategory,
-                    onSelected: (_) => setState(() => _selectedCategory = label),
-                  ))
-              .toList(),
-        ),
         const SizedBox(height: 22),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: ['Songs', 'Artists', 'Albums', 'Genres']
+                .map(
+                  (label) => Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: FilterChip(
+                      label: Text(label),
+                      selected: label == _selectedCategory,
+                      onSelected: (_) => setState(() => _selectedCategory = label),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 28),
         if (_isLoading)
           const _LibraryLoading()
         else
@@ -875,7 +886,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
           children: [
             Text(
               '${filteredSongs.length} songs',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
             const SizedBox(height: 8),
             AlphabeticalList(
@@ -2513,8 +2526,8 @@ class RealSongCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(vertical: 4),
-        leading: SongArtwork(song: song, size: 52),
+        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        leading: SongArtwork(song: song, size: 58),
         title: Text(
           song.title,
           maxLines: 1,
