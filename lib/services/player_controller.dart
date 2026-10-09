@@ -15,6 +15,7 @@ class PlayerController extends ChangeNotifier {
     this.onPositionChanged,
     this.onSeek,
     this.onPlaybackCompleted,
+    this.onQueuePositionChanged,
   }) {
     _subscriptions = [
       _gateway.playbackStateStream.listen(_onPlaybackState),
@@ -28,9 +29,11 @@ class PlayerController extends ChangeNotifier {
 
   final PlaybackGateway _gateway;
   final Future<void> Function(Song song)? onSongStarted;
-  final Future<void> Function(Song song, Duration position, bool isPlaying)? onPositionChanged;
+  final Future<void> Function(Song song, Duration position, bool isPlaying)?
+  onPositionChanged;
   final void Function(Song song, Duration position)? onSeek;
   final Future<void> Function()? onPlaybackCompleted;
+  final void Function(Song song, List<Song> queue)? onQueuePositionChanged;
   late final List<StreamSubscription<Object?>> _subscriptions;
   List<Song> _songs = const [];
   int _currentIndex = -1;
@@ -64,6 +67,7 @@ class PlayerController extends ChangeNotifier {
     _status = PlayerStatus.loading;
     _errorMessage = null;
     notifyListeners();
+    onQueuePositionChanged?.call(song, _songs);
 
     try {
       await _gateway.setQueue(_songs, _currentIndex);
@@ -110,8 +114,8 @@ class PlayerController extends ChangeNotifier {
     final safePosition = position < Duration.zero
         ? Duration.zero
         : position > duration
-            ? duration
-            : position;
+        ? duration
+        : position;
     try {
       await _gateway.seek(safePosition);
       _position = safePosition;
@@ -157,10 +161,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> toggleShuffle() => setShuffleMode(
-        _shuffleMode == AudioServiceShuffleMode.none
-            ? AudioServiceShuffleMode.all
-            : AudioServiceShuffleMode.none,
-      );
+    _shuffleMode == AudioServiceShuffleMode.none
+        ? AudioServiceShuffleMode.all
+        : AudioServiceShuffleMode.none,
+  );
 
   Future<void> setRepeatMode(AudioServiceRepeatMode mode) async {
     try {
@@ -176,8 +180,8 @@ class PlayerController extends ChangeNotifier {
     final nextMode = switch (_repeatMode) {
       AudioServiceRepeatMode.none => AudioServiceRepeatMode.all,
       AudioServiceRepeatMode.all => AudioServiceRepeatMode.one,
-      AudioServiceRepeatMode.one || AudioServiceRepeatMode.group =>
-        AudioServiceRepeatMode.none,
+      AudioServiceRepeatMode.one ||
+      AudioServiceRepeatMode.group => AudioServiceRepeatMode.none,
     };
     return setRepeatMode(nextMode);
   }
@@ -194,19 +198,20 @@ class PlayerController extends ChangeNotifier {
     if (previousSong?.id != _currentSong?.id && _currentSong != null) {
       _position = Duration.zero;
       onSeek?.call(_currentSong!, Duration.zero);
+      onQueuePositionChanged?.call(_currentSong!, _songs);
     } else {
       _position = rawPosition < Duration.zero
           ? Duration.zero
           : rawPosition > _duration && _duration > Duration.zero
-              ? _duration
-              : rawPosition;
+          ? _duration
+          : rawPosition;
     }
     _status = switch (state.processingState) {
       AudioProcessingState.idle => PlayerStatus.idle,
-      AudioProcessingState.loading || AudioProcessingState.buffering =>
-        PlayerStatus.loading,
-      AudioProcessingState.ready || AudioProcessingState.completed =>
-        PlayerStatus.ready,
+      AudioProcessingState.loading ||
+      AudioProcessingState.buffering => PlayerStatus.loading,
+      AudioProcessingState.ready ||
+      AudioProcessingState.completed => PlayerStatus.ready,
       AudioProcessingState.error => PlayerStatus.error,
     };
     if (state.processingState == AudioProcessingState.error ||

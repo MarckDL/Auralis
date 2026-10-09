@@ -20,7 +20,10 @@ void main() {
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('auralis_database_test_');
     path = '${directory.path}/auralis.db';
-    database = await AuralisDatabase.open(path: path, factory: databaseFactoryFfi);
+    database = await AuralisDatabase.open(
+      path: path,
+      factory: databaseFactoryFfi,
+    );
   });
 
   tearDown(() async {
@@ -28,26 +31,32 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  test('creates the schema and persists songs, favorites, playlists and history', () async {
-    await database.upsertSongs([songA, songB]);
-    await database.favoritesStore.saveFavoriteIds({'a'});
-    final now = DateTime(2026);
-    await database.playlistsStore.savePlaylists([
-      Playlist(
-        id: 'playlist',
-        name: 'Test playlist',
-        songIds: const ['b', 'a'],
-        createdAt: now,
-        updatedAt: now,
-      ),
-    ]);
-    final history = HistoryController(repository: database.historyStore);
-    await history.record(songB, now: now);
+  test(
+    'creates the schema and persists songs, favorites, playlists and history',
+    () async {
+      await database.upsertSongs([songA, songB]);
+      await database.favoritesStore.saveFavoriteIds({'a'});
+      final now = DateTime(2026);
+      await database.playlistsStore.savePlaylists([
+        Playlist(
+          id: 'playlist',
+          name: 'Test playlist',
+          songIds: const ['b', 'a'],
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ]);
+      final history = HistoryController(repository: database.historyStore);
+      await history.record(songB, now: now);
 
-    expect(await database.favoritesStore.loadFavoriteIds(), {'a'});
-    expect((await database.playlistsStore.loadPlaylists()).single.songIds, ['b', 'a']);
-    expect((await history.repositoryEntries()).single.song, songB);
-  });
+      expect(await database.favoritesStore.loadFavoriteIds(), {'a'});
+      expect((await database.playlistsStore.loadPlaylists()).single.songIds, [
+        'b',
+        'a',
+      ]);
+      expect((await history.repositoryEntries()).single.song, songB);
+    },
+  );
 
   test('keeps history count after reopening the database', () async {
     await database.upsertSongs([songA]);
@@ -55,11 +64,22 @@ void main() {
     await history.record(songA, now: DateTime(2026));
     await history.record(songA, now: DateTime(2026, 1, 2));
     await database.close();
-    database = await AuralisDatabase.open(path: path, factory: databaseFactoryFfi);
+    database = await AuralisDatabase.open(
+      path: path,
+      factory: databaseFactoryFfi,
+    );
 
     final restored = HistoryController(repository: database.historyStore);
     await restored.load();
     expect(restored.entries.single.playCount, 2);
+  });
+
+  test('loads cached songs ordered by title', () async {
+    await database.upsertSongs([songB, songA]);
+
+    final songs = await database.loadSongs();
+
+    expect(songs.map((song) => song.id), ['a', 'b']);
   });
 
   test('migrates legacy JSON stores only once and preserves order', () async {
@@ -75,14 +95,20 @@ void main() {
       ),
     ]);
 
-    await database.migrateLegacyData(favorites: favorites, playlists: playlists);
+    await database.migrateLegacyData(
+      favorites: favorites,
+      playlists: playlists,
+    );
     await database.migrateLegacyData(
       favorites: _MemoryFavoritesStore({'b'}),
       playlists: _MemoryPlaylistsStore(const []),
     );
 
     expect(await database.favoritesStore.loadFavoriteIds(), {'a'});
-    expect((await database.playlistsStore.loadPlaylists()).single.songIds, ['b', 'a']);
+    expect((await database.playlistsStore.loadPlaylists()).single.songIds, [
+      'b',
+      'a',
+    ]);
   });
 }
 
@@ -115,12 +141,22 @@ class _MemoryPlaylistsStore implements PlaylistsStore {
 }
 
 const songA = Song(
-  id: 'a', title: 'Song A', artist: 'Artist A', album: 'Album A',
-  duration: Duration(minutes: 3), path: '/music/a.mp3', format: 'mp3',
+  id: 'a',
+  title: 'Song A',
+  artist: 'Artist A',
+  album: 'Album A',
+  duration: Duration(minutes: 3),
+  path: '/music/a.mp3',
+  format: 'mp3',
   mimeType: 'audio/mpeg',
 );
 const songB = Song(
-  id: 'b', title: 'Song B', artist: 'Artist B', album: 'Album B',
-  duration: Duration(minutes: 4), path: '/music/b.mp3', format: 'mp3',
+  id: 'b',
+  title: 'Song B',
+  artist: 'Artist B',
+  album: 'Album B',
+  duration: Duration(minutes: 4),
+  path: '/music/b.mp3',
+  format: 'mp3',
   mimeType: 'audio/mpeg',
 );

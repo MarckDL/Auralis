@@ -1,5 +1,5 @@
 name: auralis
-description: "Reproductor y biblioteca de música local para Android."
+description: "Mysic para música local y en línea."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.3+5
 
 environment:
   sdk: ^3.13.3
@@ -33,10 +33,14 @@ dependencies:
 
   local_audio_scan: ^2.0.0
   just_audio: ^0.10.6
+  just_waveform: ^0.0.7
   audio_service: ^0.18.19
   path_provider: ^2.1.6
   sqflite: ^2.4.4
   permission_handler: ^12.0.1
+  http: ^1.6.0
+  flutter_secure_storage: ^11.2.0
+  google_sign_in: ^7.2.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

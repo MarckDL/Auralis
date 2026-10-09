@@ -1,5 +1,28 @@
 # Auralis
 
+## Mysic en Android
+
+La app muestra dos modos: **En mi dispositivo** usa la biblioteca local sin cuenta;
+**En línea** consulta el backend de Mysic para canciones, listas y favoritos. La
+app usa `https://myslc.duckdns.org` como URL pública del backend. Otra instancia
+puede compilarse con `--dart-define=MYSIC_API_URL=https://servidor.example`.
+El usuario no configura esta dirección; cambia entre modos desde Ajustes.
+La URL no es un secreto; las credenciales de Navidrome y de las bases de datos
+permanecen en el backend.
+
+El backend correspondiente está en la rama `feature/alpha-Mysic` del repositorio
+Mysic. Hay que desplegar su cambio que protege `/api/catalog/media/:id/stream`
+y expone `/api/client-config` antes de probar Google o el audio remoto. Google
+requiere registrar en Google Cloud los clientes OAuth Android para ambos paquetes:
+`com.auralis.auralis.dev` (debug) y `com.auralis.auralis` (release), con la
+huella SHA-1 de cada firma. El backend debe conservar su cliente OAuth web en
+`GOOGLE_CLIENT_ID`; el móvil consulta ese ID público en `/api/client-config`.
+
+El APK debug se instala por separado como **Mysic Dev**. La release mantiene el
+identificador `com.auralis.auralis` y la firma configurada en
+`android/key.properties` para poder actualizar la app anterior. La app release
+exige HTTPS para el servidor; debug admite HTTP para pruebas en una red local.
+
 Auralis es una aplicación Android de música local desarrollada con Flutter y Dart.
 
 ## Estado actual

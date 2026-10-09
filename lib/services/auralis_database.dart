@@ -21,15 +21,15 @@ class AuralisDatabase {
     final database = await (factory ?? databaseFactory).openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
-      version: 2,
-      onCreate: (db, _) async => _createSchema(db),
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await db.execute(
-            'ALTER TABLE history ADD COLUMN listened_ms INTEGER NOT NULL DEFAULT 0',
-          );
-        }
-      },
+        version: 2,
+        onCreate: (db, _) async => _createSchema(db),
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute(
+              'ALTER TABLE history ADD COLUMN listened_ms INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+        },
       ),
     );
     return AuralisDatabase._(database);
@@ -52,37 +52,29 @@ class AuralisDatabase {
     );
     if (marker.isNotEmpty) return;
 
-    final favoriteIds = await (favorites ?? FavoritesRepository()).loadFavoriteIds();
-    final oldPlaylists = await (playlists ?? PlaylistsRepository()).loadPlaylists();
+    final favoriteIds = await (favorites ?? FavoritesRepository())
+        .loadFavoriteIds();
+    final oldPlaylists = await (playlists ?? PlaylistsRepository())
+        .loadPlaylists();
     await _db.transaction((transaction) async {
       for (final id in favoriteIds) {
-        await transaction.insert(
-          'favorites',
-          {'song_id': id},
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        await transaction.insert('favorites', {
+          'song_id': id,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
       for (final playlist in oldPlaylists) {
-        await transaction.insert(
-          'playlists',
-          {
-            'id': playlist.id,
-            'name': playlist.name,
-            'created_at': playlist.createdAt.millisecondsSinceEpoch,
-            'updated_at': playlist.updatedAt.millisecondsSinceEpoch,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        await transaction.insert('playlists', {
+          'id': playlist.id,
+          'name': playlist.name,
+          'created_at': playlist.createdAt.millisecondsSinceEpoch,
+          'updated_at': playlist.updatedAt.millisecondsSinceEpoch,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
         for (var index = 0; index < playlist.songIds.length; index++) {
-          await transaction.insert(
-            'playlist_songs',
-            {
-              'playlist_id': playlist.id,
-              'song_id': playlist.songIds[index],
-              'position': index,
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore,
-          );
+          await transaction.insert('playlist_songs', {
+            'playlist_id': playlist.id,
+            'song_id': playlist.songIds[index],
+            'position': index,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
       }
       await transaction.insert('metadata', {
@@ -107,7 +99,8 @@ class AuralisDatabase {
       final albumCounts = <String, int>{};
       for (final song in songs) {
         final artist = song.artist.trim();
-        final album = '${artist.toLowerCase()}\u0000${song.album.toLowerCase()}';
+        final album =
+            '${artist.toLowerCase()}\u0000${song.album.toLowerCase()}';
         artistCounts[artist] = (artistCounts[artist] ?? 0) + 1;
         albumCounts[album] = (albumCounts[album] ?? 0) + 1;
       }
@@ -129,17 +122,30 @@ class AuralisDatabase {
     });
   }
 
+  Future<List<Song>> loadSongs() async {
+    final rows = await query('songs', orderBy: 'title COLLATE NOCASE ASC');
+    return rows.map(_songFromRow).toList(growable: false);
+  }
+
   Future<void> close() => _db.close();
 
-  Future<List<Map<String, Object?>>> query(String table, {
+  Future<List<Map<String, Object?>>> query(
+    String table, {
     String? where,
     List<Object?>? whereArgs,
     String? orderBy,
   }) {
-    return _db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy);
+    return _db.query(
+      table,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: orderBy,
+    );
   }
 
-  Future<void> transaction(Future<void> Function(Transaction transaction) action) {
+  Future<void> transaction(
+    Future<void> Function(Transaction transaction) action,
+  ) {
     return _db.transaction(action);
   }
 
@@ -173,34 +179,36 @@ class AuralisDatabase {
 }
 
 Map<String, Object?> _songValues(Song song) => {
-      'id': song.id,
-      'title': song.title,
-      'artist': song.artist,
-      'album': song.album,
-      'duration_ms': song.duration.inMilliseconds,
-      'path': song.path,
-      'format': song.format,
-      'mime_type': song.mimeType,
-      'genre': song.genre,
-      'date_added': song.dateAdded?.millisecondsSinceEpoch,
-      'artwork': song.artwork,
-    };
+  'id': song.id,
+  'title': song.title,
+  'artist': song.artist,
+  'album': song.album,
+  'duration_ms': song.duration.inMilliseconds,
+  'path': song.path,
+  'format': song.format,
+  'mime_type': song.mimeType,
+  'genre': song.genre,
+  'date_added': song.dateAdded?.millisecondsSinceEpoch,
+  'artwork': song.artwork,
+};
 
 Song _songFromRow(Map<String, Object?> row) => Song(
-      id: row['id']! as String,
-      title: row['title']! as String,
-      artist: row['artist']! as String,
-      album: row['album']! as String,
-      duration: Duration(milliseconds: row['duration_ms']! as int),
-      path: row['path']! as String,
-      format: row['format']! as String,
-      mimeType: row['mime_type']! as String,
-      genre: row['genre']! as String,
-      dateAdded: row['date_added'] == null
-          ? null
-          : DateTime.fromMillisecondsSinceEpoch(row['date_added']! as int),
-      artwork: row['artwork'] == null ? null : Uint8List.fromList(row['artwork']! as List<int>),
-    );
+  id: row['id']! as String,
+  title: row['title']! as String,
+  artist: row['artist']! as String,
+  album: row['album']! as String,
+  duration: Duration(milliseconds: row['duration_ms']! as int),
+  path: row['path']! as String,
+  format: row['format']! as String,
+  mimeType: row['mime_type']! as String,
+  genre: row['genre']! as String,
+  dateAdded: row['date_added'] == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(row['date_added']! as int),
+  artwork: row['artwork'] == null
+      ? null
+      : Uint8List.fromList(row['artwork']! as List<int>),
+);
 
 class _DatabaseFavoritesStore implements FavoritesStore {
   _DatabaseFavoritesStore(this.database);
@@ -238,13 +246,19 @@ class _DatabasePlaylistsStore implements PlaylistsStore {
         whereArgs: [row['id']],
         orderBy: 'position ASC',
       );
-      result.add(Playlist(
-        id: row['id']! as String,
-        name: row['name']! as String,
-        songIds: songs.map((song) => song['song_id']! as String).toList(),
-        createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at']! as int),
-      ));
+      result.add(
+        Playlist(
+          id: row['id']! as String,
+          name: row['name']! as String,
+          songIds: songs.map((song) => song['song_id']! as String).toList(),
+          createdAt: DateTime.fromMillisecondsSinceEpoch(
+            row['created_at']! as int,
+          ),
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(
+            row['updated_at']! as int,
+          ),
+        ),
+      );
     }
     return result;
   }
@@ -282,14 +296,25 @@ class _DatabaseHistoryStore implements HistoryStore {
     final rows = await database.query('history', orderBy: 'played_at DESC');
     final result = <HistoryEntry>[];
     for (final row in rows) {
-      final songs = await database.query('songs', where: 'id = ?', whereArgs: [row['song_id']], orderBy: 'id');
+      final songs = await database.query(
+        'songs',
+        where: 'id = ?',
+        whereArgs: [row['song_id']],
+        orderBy: 'id',
+      );
       if (songs.isEmpty) continue;
-      result.add(HistoryEntry(
-        song: _songFromRow(songs.first),
-        playedAt: DateTime.fromMillisecondsSinceEpoch(row['played_at']! as int),
-        playCount: row['play_count']! as int,
-        listenedDuration: Duration(milliseconds: (row['listened_ms'] ?? 0) as int),
-      ));
+      result.add(
+        HistoryEntry(
+          song: _songFromRow(songs.first),
+          playedAt: DateTime.fromMillisecondsSinceEpoch(
+            row['played_at']! as int,
+          ),
+          playCount: row['play_count']! as int,
+          listenedDuration: Duration(
+            milliseconds: (row['listened_ms'] ?? 0) as int,
+          ),
+        ),
+      );
     }
     return result;
   }
@@ -297,7 +322,11 @@ class _DatabaseHistoryStore implements HistoryStore {
   @override
   Future<void> saveHistoryEntry(HistoryEntry entry) async {
     await database.transaction((transaction) async {
-      await transaction.insert('songs', _songValues(entry.song), conflictAlgorithm: ConflictAlgorithm.replace);
+      await transaction.insert(
+        'songs',
+        _songValues(entry.song),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
       await transaction.insert('history', {
         'song_id': entry.song.id,
         'played_at': entry.playedAt.millisecondsSinceEpoch,

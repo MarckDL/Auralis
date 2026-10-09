@@ -15,6 +15,9 @@ class Song {
     this.genre = 'Unknown genre',
     this.dateAdded,
     this.artwork,
+    this.remoteId,
+    this.artworkUrl,
+    this.requestHeaders = const {},
   });
 
   factory Song.fromAudioTrack(AudioTrack track) {
@@ -63,8 +66,12 @@ class Song {
   final String genre;
   final DateTime? dateAdded;
   final Uint8List? artwork;
+  final String? remoteId;
+  final String? artworkUrl;
+  final Map<String, String> requestHeaders;
 
   bool get hasArtwork => artwork != null && artwork!.isNotEmpty;
+  bool get isRemote => remoteId != null;
 
   String get durationLabel {
     final minutes = duration.inMinutes;

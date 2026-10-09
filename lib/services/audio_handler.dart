@@ -36,7 +36,8 @@ abstract interface class PlaybackGateway {
 class AuralisAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler
     implements PlaybackGateway {
-  AuralisAudioHandler({AudioPlayer? player}) : _player = player ?? AudioPlayer() {
+  AuralisAudioHandler({AudioPlayer? player})
+    : _player = player ?? AudioPlayer() {
     _subscriptions = [
       _player.playbackEventStream.listen(_broadcastState),
       _player.positionStream.listen(_broadcastPosition),
@@ -49,6 +50,7 @@ class AuralisAudioHandler extends BaseAudioHandler
   List<Song> _songs = const [];
   bool _isDisposed = false;
   bool _autoAdvancePending = false;
+  int _queueGeneration = 0;
 
   @override
   Stream<PlaybackState> get playbackStateStream => playbackState;
@@ -61,6 +63,7 @@ class AuralisAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> setQueue(List<Song> songs, int initialIndex) async {
+    final generation = ++_queueGeneration;
     _songs = List.unmodifiable(songs);
     if (_songs.isEmpty) {
       await _player.stop();
@@ -70,23 +73,30 @@ class AuralisAudioHandler extends BaseAudioHandler
     }
 
     final safeIndex = initialIndex.clamp(0, _songs.length - 1);
-    final items = await Future.wait(_songs.map(_toMediaItem));
+    final items = _songs.map(_toMediaItem).toList();
     final sources = List<AudioSource>.generate(
       _songs.length,
       (index) => AudioSource.uri(
-        Uri.file(_songs[index].path),
+        _songs[index].isRemote
+            ? Uri.parse(_songs[index].path)
+            : Uri.file(_songs[index].path),
+        headers: _songs[index].requestHeaders,
         tag: items[index],
       ),
     );
 
     queue.add(items);
+    mediaItem.add(items[safeIndex]);
+    unawaited(_loadCurrentArtwork(safeIndex, generation));
     await _player.setAudioSources(
       sources,
       initialIndex: safeIndex,
       initialPosition: Duration.zero,
       preload: true,
     );
-    mediaItem.add(items[safeIndex]);
+    if (generation == _queueGeneration) {
+      mediaItem.add(queue.value[safeIndex]);
+    }
   }
 
   @override
@@ -109,7 +119,9 @@ class AuralisAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {
-    await _player.setShuffleModeEnabled(shuffleMode == AudioServiceShuffleMode.all);
+    await _player.setShuffleModeEnabled(
+      shuffleMode == AudioServiceShuffleMode.all,
+    );
   }
 
   @override
@@ -169,7 +181,8 @@ class AuralisAudioHandler extends BaseAudioHandler
   }
 
   void _broadcastPosition(Duration position) {
-    if (_isDisposed || playbackState.value.processingState == AudioProcessingState.idle) {
+    if (_isDisposed ||
+        playbackState.value.processingState == AudioProcessingState.idle) {
       return;
     }
     playbackState.add(
@@ -192,26 +205,52 @@ class AuralisAudioHandler extends BaseAudioHandler
   void _updateCurrentMediaItem(int? index) {
     if (index == null || index < 0 || index >= queue.value.length) return;
     mediaItem.add(queue.value[index]);
+    unawaited(_loadCurrentArtwork(index, _queueGeneration));
   }
 
-  Future<MediaItem> _toMediaItem(Song song) async {
-    final artUri = await _writeArtwork(song);
+  MediaItem _toMediaItem(Song song) {
     return MediaItem(
       id: song.id,
       title: song.title,
       artist: song.artist,
       album: song.album,
       duration: song.duration,
-      artUri: artUri,
+      artUri: song.artworkUrl == null ? null : Uri.tryParse(song.artworkUrl!),
       extras: {'path': song.path, 'format': song.format},
     );
+  }
+
+  Future<MediaItem> _withArtwork(MediaItem item, Song song) async {
+    final artUri = await _writeArtwork(song);
+    return artUri == null ? item : item.copyWith(artUri: artUri);
+  }
+
+  Future<void> _loadCurrentArtwork(int index, int generation) async {
+    final items = queue.value;
+    if (index >= items.length ||
+        index >= _songs.length ||
+        items[index].artUri != null) {
+      return;
+    }
+    final updated = await _withArtwork(items[index], _songs[index]);
+    if (generation != _queueGeneration ||
+        updated.artUri == null ||
+        index >= queue.value.length) {
+      return;
+    }
+    final current = List<MediaItem>.of(queue.value);
+    current[index] = updated;
+    queue.add(current);
+    if (mediaItem.value?.id == updated.id) mediaItem.add(updated);
   }
 
   Future<Uri?> _writeArtwork(Song song) async {
     if (!song.hasArtwork) return null;
     try {
       final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/auralis_art_${song.id.hashCode}.jpg');
+      final file = File(
+        '${directory.path}/auralis_art_${song.id.hashCode}.jpg',
+      );
       if (!await file.exists()) await file.writeAsBytes(song.artwork!);
       return file.uri;
     } catch (_) {

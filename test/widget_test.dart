@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_audio_scan/local_audio_scan.dart';
 
 import 'package:auralis/main.dart';
+import 'package:auralis/models/playlist.dart';
 import 'package:auralis/models/song.dart';
 import 'package:auralis/services/audio_handler.dart';
 import 'package:auralis/services/favorites_controller.dart';
@@ -13,33 +14,49 @@ import 'package:auralis/services/favorites_repository.dart';
 import 'package:auralis/services/history_controller.dart';
 import 'package:auralis/services/music_scanner.dart';
 import 'package:auralis/services/player_controller.dart';
+import 'package:auralis/services/playlists_controller.dart';
+import 'package:auralis/services/playlists_repository.dart';
 import 'package:auralis/services/statistics_controller.dart';
 
 void main() {
   testWidgets('shows the Auralis home screen', (WidgetTester tester) async {
     await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
-    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('Music'), findsNothing);
+    expect(
+      find.textContaining(RegExp('Good (morning|afternoon|evening)')),
+      findsOneWidget,
+    );
     expect(find.text('Your highlights'), findsNothing);
     expect(find.text('Made for you'), findsNothing);
     expect(find.text('Recently played'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
-  testWidgets('uses the light theme and switches appearance from Settings', (WidgetTester tester) async {
+  testWidgets('uses the light theme and switches appearance from Settings', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).theme!.brightness, Brightness.light);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).theme!.brightness,
+      Brightness.light,
+    );
     await tester.tap(find.text('Settings'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Appearance'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.dark_mode_outlined).last);
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode, ThemeMode.dark);
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
   });
 
-  testWidgets('navigates between the main sections', (WidgetTester tester) async {
+  testWidgets('navigates between the main sections', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(AuralisApp(playbackGateway: FakePlaybackGateway()));
 
     await tester.tap(find.text('Playlists'));
@@ -48,16 +65,20 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pump();
-    expect(find.text('Preferences'), findsOneWidget);
+    expect(find.text('Biblioteca'), findsOneWidget);
   });
 
-  testWidgets('renders songs returned by the scanner', (WidgetTester tester) async {
+  testWidgets('renders songs returned by the scanner', (
+    WidgetTester tester,
+  ) async {
     final scanner = MusicScanner(
       gateway: FakeAudioScannerGateway(tracks: [_track('Song A', 'a.mp3')]),
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+      MaterialApp(
+        home: Scaffold(body: LibraryScreen(scanner: scanner)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -65,18 +86,118 @@ void main() {
     expect(find.text('Song A'), findsOneWidget);
   });
 
-  testWidgets('filters the scanned library by title', (WidgetTester tester) async {
+  testWidgets('shows cached songs without scanning again', (
+    WidgetTester tester,
+  ) async {
+    final gateway = FakeAudioScannerGateway(
+      tracks: [_track('Fresh song', 'fresh.mp3')],
+    );
+    final cached = _catalogSong('cached', 'Cached artist', 'Cached album');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LibraryScreen(
+            scanner: MusicScanner(gateway: gateway),
+            initialSongs: [cached],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Song cached'), findsOneWidget);
+    expect(find.text('Fresh song'), findsNothing);
+    expect(gateway.scanCount, 0);
+
+    await tester.tap(find.byIcon(Icons.refresh_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Fresh song'), findsOneWidget);
+    expect(gateway.scanCount, 1);
+  });
+
+  testWidgets('playlist artwork follows the first available song', (
+    WidgetTester tester,
+  ) async {
+    final player = PlayerController(gateway: FakePlaybackGateway());
+    final playlists = PlaylistsController(
+      playerController: player,
+      repository: _MemoryPlaylistsStore(),
+    );
+    await playlists.load();
+    await playlists.createPlaylist('Road trip');
+    final playlist = playlists.playlists.single;
+    final first = _catalogSong('first', 'Artist', 'Album');
+    final second = _catalogSong('second', 'Artist', 'Album');
+    await playlists.addSong(playlist.id, first);
+    await playlists.addSong(playlist.id, second);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlaylistArtwork(
+            songs: playlists.songsFor(playlists.playlists.single, [
+              first,
+              second,
+            ]),
+            size: 120,
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.widget<SongArtwork>(find.byType(SongArtwork)).song.id,
+      'first',
+    );
+
+    await playlists.reorderSongs(playlist.id, 1, 0);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlaylistArtwork(
+            songs: playlists.songsFor(playlists.playlists.single, [
+              first,
+              second,
+            ]),
+            size: 120,
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.widget<SongArtwork>(find.byType(SongArtwork)).song.id,
+      'second',
+    );
+
+    playlists.dispose();
+    player.dispose();
+  });
+
+  testWidgets('empty playlist artwork shows a playlist placeholder', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: PlaylistArtwork(songs: [], size: 120)),
+      ),
+    );
+
+    expect(find.byIcon(Icons.queue_music_rounded), findsOneWidget);
+  });
+
+  testWidgets('filters the scanned library by title', (
+    WidgetTester tester,
+  ) async {
     final scanner = MusicScanner(
       gateway: FakeAudioScannerGateway(
-        tracks: [
-          _track('Song A', 'a.mp3'),
-          _track('Different Song', 'b.mp3'),
-        ],
+        tracks: [_track('Song A', 'a.mp3'), _track('Different Song', 'b.mp3')],
       ),
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+      MaterialApp(
+        home: Scaffold(body: LibraryScreen(scanner: scanner)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -88,7 +209,9 @@ void main() {
     expect(find.text('Different Song'), findsNothing);
   });
 
-  testWidgets('shows an empty state when search has no matches', (WidgetTester tester) async {
+  testWidgets('shows an empty state when search has no matches', (
+    WidgetTester tester,
+  ) async {
     final scanner = MusicScanner(
       gateway: FakeAudioScannerGateway(tracks: [_track('Song A', 'a.mp3')]),
     );
@@ -114,27 +237,39 @@ void main() {
     await tester.tap(find.text('Clear search'));
     await tester.pump();
     expect(find.byType(TextField), findsOneWidget);
-    expect((tester.widget<TextField>(find.byType(TextField)).controller?.text), isEmpty);
+    expect(
+      (tester.widget<TextField>(find.byType(TextField)).controller?.text),
+      isEmpty,
+    );
     expect(cleared, isTrue);
   });
 
-  testWidgets('shows persisted listening statistics', (WidgetTester tester) async {
+  testWidgets('shows persisted listening statistics', (
+    WidgetTester tester,
+  ) async {
     final statistics = StatisticsController(repository: MemoryHistoryStore());
-    await statistics.recordSongStarted(_catalogSong('stats', 'Artist', 'Album'));
+    await statistics.recordSongStarted(
+      _catalogSong('stats', 'Artist', 'Album'),
+    );
 
     await tester.pumpWidget(
       MaterialApp(home: StatisticsScreen(controller: statistics)),
     );
 
-    expect(find.text('1 plays'), findsOneWidget);
+    expect(find.text('1'), findsWidgets);
+    expect(find.text('plays'), findsOneWidget);
     expect(find.text('Top artists'), findsOneWidget);
     expect(find.text('Artist'), findsWidgets);
     statistics.dispose();
   });
 
-  testWidgets('Home forwards search and See all actions', (WidgetTester tester) async {
+  testWidgets('Home forwards search and See all actions', (
+    WidgetTester tester,
+  ) async {
     final statistics = StatisticsController(repository: MemoryHistoryStore());
-    await statistics.recordSongStarted(_catalogSong('history', 'Artist', 'Album'));
+    await statistics.recordSongStarted(
+      _catalogSong('history', 'Artist', 'Album'),
+    );
     String? searchQuery;
     var openedHistory = false;
 
@@ -161,10 +296,44 @@ void main() {
     statistics.dispose();
   });
 
-  testWidgets('route scaffold shows the global Mini Player', (WidgetTester tester) async {
+  testWidgets('Home artist opens its songs', (WidgetTester tester) async {
+    final statistics = StatisticsController(repository: MemoryHistoryStore());
+    final songs = [
+      _catalogSong('a', 'Luna Vale', 'Afterglow'),
+      _catalogSong('b', 'Luna Vale', 'Afterglow'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onOpenPlayer: () {},
+            history: statistics,
+            availableSongs: songs,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Luna Vale').first);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ArtistDetailScreen), findsOneWidget);
+    await tester.tap(find.text('Songs'));
+    await tester.pumpAndSettle();
+    expect(find.text('Song a'), findsOneWidget);
+    expect(find.text('Song b'), findsOneWidget);
+    statistics.dispose();
+  });
+
+  testWidgets('route scaffold shows the global Mini Player', (
+    WidgetTester tester,
+  ) async {
     final gateway = FakePlaybackGateway();
     final player = PlayerController(gateway: gateway);
-    final favorites = FavoritesController(repository: _MemoryFavoritesRepository());
+    final favorites = FavoritesController(
+      repository: _MemoryFavoritesRepository(),
+    );
     await player.playSong(_catalogSong('playing', 'Artist', 'Album'), [
       _catalogSong('playing', 'Artist', 'Album'),
     ]);
@@ -188,14 +357,17 @@ void main() {
     favorites.dispose();
   });
 
-  testWidgets('shows a permission state when access is denied',
-      (WidgetTester tester) async {
+  testWidgets('shows a permission state when access is denied', (
+    WidgetTester tester,
+  ) async {
     final scanner = MusicScanner(
       gateway: FakeAudioScannerGateway(permission: false, requestResult: false),
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: LibraryScreen(scanner: scanner))),
+      MaterialApp(
+        home: Scaffold(body: LibraryScreen(scanner: scanner)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -247,7 +419,9 @@ void main() {
     expect(find.text('Unknown genre'), findsOneWidget);
   });
 
-  testWidgets('plays the complete artist collection from its detail', (tester) async {
+  testWidgets('plays the complete artist collection from its detail', (
+    tester,
+  ) async {
     final songs = [
       _catalogSong('a', 'Luna Vale', 'Afterglow'),
       _catalogSong('b', 'Luna Vale', 'Afterglow'),
@@ -266,11 +440,32 @@ void main() {
 
     await tester.tap(find.text('Play all'));
     expect(selectedQueue, songs);
+    expect(find.text('Song a'), findsNothing);
+    await tester.tap(find.text('Songs'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Song b'));
     expect(selectedQueue, songs);
   });
 
-  testWidgets('plays the complete genre collection from its detail', (tester) async {
+  testWidgets('artist albums and songs are separate sections', (tester) async {
+    final songs = [_catalogSong('a', 'Luna Vale', 'Afterglow')];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ArtistDetailScreen(artist: 'Luna Vale', songs: songs),
+      ),
+    );
+
+    expect(find.text('Afterglow'), findsOneWidget);
+    expect(find.text('Song a'), findsNothing);
+    await tester.tap(find.text('Songs'));
+    await tester.pumpAndSettle();
+    expect(find.text('Afterglow'), findsNothing);
+    expect(find.text('Song a'), findsOneWidget);
+  });
+
+  testWidgets('plays the complete genre collection from its detail', (
+    tester,
+  ) async {
     final songs = [
       _catalogSong('a', 'Artist A', 'Album A'),
       _catalogSong('b', 'Artist B', 'Album B'),
@@ -293,13 +488,17 @@ void main() {
     expect(selectedQueue, songs);
   });
 
-  testWidgets('plays the complete album and favorites collections', (tester) async {
+  testWidgets('plays the complete album and favorites collections', (
+    tester,
+  ) async {
     final songs = [
       _catalogSong('a', 'Luna Vale', 'Afterglow'),
       _catalogSong('b', 'Luna Vale', 'Afterglow'),
     ];
     List<Song>? selectedQueue;
-    final favorites = FavoritesController(repository: _MemoryFavoritesRepository());
+    final favorites = FavoritesController(
+      repository: _MemoryFavoritesRepository(),
+    );
     await favorites.addFavorite(songs[0]);
     await favorites.addFavorite(songs[1]);
 
@@ -354,6 +553,7 @@ class FakeAudioScannerGateway implements AudioScannerGateway {
   final List<AudioTrack> tracks;
   final bool permission;
   final bool requestResult;
+  int scanCount = 0;
 
   @override
   Future<bool> checkPermission() async => permission;
@@ -362,7 +562,22 @@ class FakeAudioScannerGateway implements AudioScannerGateway {
   Future<bool> requestPermission() async => requestResult;
 
   @override
-  Future<List<AudioTrack>> scanTracks() async => tracks;
+  Future<List<AudioTrack>> scanTracks() async {
+    scanCount++;
+    return tracks;
+  }
+}
+
+class _MemoryPlaylistsStore implements PlaylistsStore {
+  List<Playlist> _playlists = const [];
+
+  @override
+  Future<List<Playlist>> loadPlaylists() async => _playlists;
+
+  @override
+  Future<void> savePlaylists(List<Playlist> playlists) async {
+    _playlists = List.unmodifiable(playlists);
+  }
 }
 
 AudioTrack _track(String title, String path) {
